@@ -1,0 +1,337 @@
+{
+  "generated_at": "2026-04-30T10:42:28.754805+00:00",
+  "scope": {
+    "base_host": "www.halipratik.com",
+    "app_version": "1.10.32",
+    "mno_samples": [
+      1,
+      58
+    ],
+    "rate_limit_probe_enabled": true
+  },
+  "checks": {
+    "security_headers": {
+      "response": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 1138.54,
+        "body_bytes": 14
+      },
+      "missing": [
+        "strict-transport-security",
+        "content-security-policy",
+        "x-content-type-options",
+        "x-frame-options",
+        "referrer-policy",
+        "permissions-policy"
+      ],
+      "exposed": {
+        "server": "Microsoft-IIS/10.0",
+        "x-powered-by": "ASP.NET",
+        "x-aspnet-version": "4.0.30319"
+      }
+    },
+    "auth_matrix": {
+      "valid_userid": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 172.72,
+        "body_bytes": 300,
+        "json": true,
+        "customer_count": 1,
+        "redirect_location": null
+      },
+      "fake_userid": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 234.74,
+        "body_bytes": 14,
+        "json": true,
+        "customer_count": 0,
+        "redirect_location": null
+      },
+      "blank_userid": {
+        "status_code": 302,
+        "content_type": "text/html; charset=windows-1254",
+        "elapsed_ms": 165.49,
+        "body_bytes": 213,
+        "json": false,
+        "customer_count": 0,
+        "redirect_location": "/Supplier/Design/Pages/PageError.aspx?aspxerrorpath=/supplier/Design/Android/SearchCustomer.aspx"
+      }
+    },
+    "customer_and_orders": [
+      {
+        "mno": 1,
+        "search": {
+          "status_code": 200,
+          "content_type": "application/json; charset=utf-8",
+          "elapsed_ms": 173.33,
+          "body_bytes": 300
+        },
+        "customer_count": 1,
+        "customers_redacted": [
+          {
+            "musno": "1",
+            "customerid_hash": "sha256:008812dd908d3bdd",
+            "name_hash": "sha256:08036f35d6119ae7",
+            "phone_hash": "sha256:f714af9ea95b97db",
+            "address_hash": "sha256:f4dc8471416ad4eb",
+            "district_id_present": true,
+            "fields_present": [
+              "MahalleAdi",
+              "MapLocation",
+              "adres",
+              "customerid",
+              "ilID",
+              "ilceID",
+              "mahalleID",
+              "musadi",
+              "musno",
+              "not1",
+              "not2",
+              "telno"
+            ]
+          }
+        ],
+        "orders": {
+          "response": {
+            "status_code": 200,
+            "content_type": "application/json; charset=utf-8",
+            "elapsed_ms": 171.49,
+            "body_bytes": 1897
+          },
+          "order_count": 10,
+          "has_status": true,
+          "has_dates": true,
+          "has_payment_total": true,
+          "total_min": 0.0,
+          "total_max": 1000.0,
+          "fields_present": [
+            "DateDeliver",
+            "DateReceive",
+            "carpetCount",
+            "m2",
+            "orderNo",
+            "orderid",
+            "status",
+            "terminalNo",
+            "total"
+          ]
+        }
+      },
+      {
+        "mno": 58,
+        "search": {
+          "status_code": 200,
+          "content_type": "application/json; charset=utf-8",
+          "elapsed_ms": 227.49,
+          "body_bytes": 253
+        },
+        "customer_count": 1,
+        "customers_redacted": [
+          {
+            "musno": "58",
+            "customerid_hash": "sha256:bae2c8cb32579b62",
+            "name_hash": "sha256:9a2f9a778c84fb1a",
+            "phone_hash": "sha256:a84d58eeec6867a1",
+            "address_hash": "sha256:ad9883854f3f04ea",
+            "district_id_present": true,
+            "fields_present": [
+              "MahalleAdi",
+              "MapLocation",
+              "adres",
+              "customerid",
+              "ilID",
+              "ilceID",
+              "mahalleID",
+              "musadi",
+              "musno",
+              "not1",
+              "not2",
+              "telno"
+            ]
+          }
+        ],
+        "orders": {
+          "response": {
+            "status_code": 200,
+            "content_type": "application/json; charset=utf-8",
+            "elapsed_ms": 172.2,
+            "body_bytes": 420
+          },
+          "order_count": 2,
+          "has_status": true,
+          "has_dates": true,
+          "has_payment_total": true,
+          "total_min": 60.0,
+          "total_max": 90.0,
+          "fields_present": [
+            "DateDeliver",
+            "DateReceive",
+            "carpetCount",
+            "m2",
+            "orderNo",
+            "orderid",
+            "status",
+            "terminalNo",
+            "total"
+          ]
+        }
+      }
+    ],
+    "rate_limit_probe": {
+      "request_count": 10,
+      "delay_seconds": 1.0,
+      "status_counts": {
+        "200": 10
+      },
+      "retry_after_seen": false
+    }
+  },
+  "findings": [
+    {
+      "title": "Missing common security headers",
+      "severity": "medium",
+      "evidence": {
+        "missing": [
+          "strict-transport-security",
+          "content-security-policy",
+          "x-content-type-options",
+          "x-frame-options",
+          "referrer-policy",
+          "permissions-policy"
+        ]
+      }
+    },
+    {
+      "title": "Technology headers exposed",
+      "severity": "low",
+      "evidence": {
+        "server": "Microsoft-IIS/10.0",
+        "x-powered-by": "ASP.NET",
+        "x-aspnet-version": "4.0.30319"
+      }
+    },
+    {
+      "title": "Search endpoint accepts invalid userid",
+      "severity": "critical",
+      "evidence": {
+        "mno": 1,
+        "fake_userid_status": 200,
+        "fake_userid_customer_count": 0
+      }
+    },
+    {
+      "title": "Error handling reveals application path",
+      "severity": "medium",
+      "evidence": {
+        "location": "/Supplier/Design/Pages/PageError.aspx?aspxerrorpath=/supplier/Design/Android/SearchCustomer.aspx"
+      }
+    },
+    {
+      "title": "Customer lookup returns personal data fields",
+      "severity": "critical",
+      "evidence": {
+        "mno": 1,
+        "customerid_hash": "sha256:008812dd908d3bdd",
+        "fields_present": [
+          "MahalleAdi",
+          "MapLocation",
+          "adres",
+          "customerid",
+          "ilID",
+          "ilceID",
+          "mahalleID",
+          "musadi",
+          "musno",
+          "not1",
+          "not2",
+          "telno"
+        ]
+      }
+    },
+    {
+      "title": "Orders endpoint returns order history by customer UUID",
+      "severity": "critical",
+      "evidence": {
+        "customerid_hash": "sha256:008812dd908d3bdd",
+        "order_count": 10,
+        "has_status": true,
+        "has_dates": true,
+        "has_payment_total": true,
+        "total_min": 0.0,
+        "total_max": 1000.0,
+        "fields_present": [
+          "DateDeliver",
+          "DateReceive",
+          "carpetCount",
+          "m2",
+          "orderNo",
+          "orderid",
+          "status",
+          "terminalNo",
+          "total"
+        ]
+      }
+    },
+    {
+      "title": "Customer lookup returns personal data fields",
+      "severity": "critical",
+      "evidence": {
+        "mno": 58,
+        "customerid_hash": "sha256:bae2c8cb32579b62",
+        "fields_present": [
+          "MahalleAdi",
+          "MapLocation",
+          "adres",
+          "customerid",
+          "ilID",
+          "ilceID",
+          "mahalleID",
+          "musadi",
+          "musno",
+          "not1",
+          "not2",
+          "telno"
+        ]
+      }
+    },
+    {
+      "title": "Orders endpoint returns order history by customer UUID",
+      "severity": "critical",
+      "evidence": {
+        "customerid_hash": "sha256:bae2c8cb32579b62",
+        "order_count": 2,
+        "has_status": true,
+        "has_dates": true,
+        "has_payment_total": true,
+        "total_min": 60.0,
+        "total_max": 90.0,
+        "fields_present": [
+          "DateDeliver",
+          "DateReceive",
+          "carpetCount",
+          "m2",
+          "orderNo",
+          "orderid",
+          "status",
+          "terminalNo",
+          "total"
+        ]
+      }
+    },
+    {
+      "title": "No rate-limit response observed in capped probe",
+      "severity": "high",
+      "evidence": {
+        "request_count": 10,
+        "delay_seconds": 1.0,
+        "status_counts": {
+          "200": 10
+        },
+        "retry_after_seen": false
+      }
+    }
+  ]
+}

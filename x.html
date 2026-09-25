@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Temizify — Arama Scripti</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+		rel="stylesheet">
+	<style>
+		:root {
+			--bg: #0F1117;
+			--surface: #1A1D27;
+			--surface2: #232734;
+			--border: #2E3345;
+			--text: #E8EAF0;
+			--text2: #9BA1B5;
+			--accent: #6366F1;
+			--accent-glow: rgba(99, 102, 241, 0.15);
+			--green: #22C55E;
+			--green-bg: rgba(34, 197, 94, 0.1);
+			--red: #EF4444;
+			--red-bg: rgba(239, 68, 68, 0.1);
+			--orange: #F59E0B;
+			--orange-bg: rgba(245, 158, 11, 0.1);
+			--blue: #3B82F6;
+			--blue-bg: rgba(59, 130, 246, 0.1);
+			--cyan: #06B6D4;
+			--cyan-bg: rgba(6, 182, 212, 0.1);
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: 'Plus Jakarta Sans', sans-serif;
+			background: var(--bg);
+			color: var(--text);
+			min-height: 100vh;
+			padding: 24px;
+		}
+
+		.header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 28px;
+			padding-bottom: 20px;
+			border-bottom: 1px solid var(--border);
+		}
+
+		.header-left {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+		}
+
+		.logo {
+			width: 40px;
+			height: 40px;
+			background: var(--accent);
+			border-radius: 10px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 20px;
+			font-weight: 800;
+			color: white;
+		}
+
+		.header h1 {
+			font-size: 22px;
+			font-weight: 800;
+			letter-spacing: -0.5px;
+		}
+
+		.header h1 span {
+			color: var(--accent);
+		}
+
+		.badge {
+			font-family: 'JetBrains Mono', monospace;
+			font-size: 11px;
+			padding: 4px 10px;
+			border-radius: 6px;
+			font-weight: 600;
+		}
+
+		.grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 20px;
+		}
+
+		.card {
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: 14px;
+			padding: 22px;
+			position: relative;
+			overflow: hidden;
+		}
+
+		.card::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			height: 3px;
+		}
+
+		.card-green::before {
+			background: var(--green);
+		}
+
+		.card-orange::before {
+			background: var(--orange);
+		}
+
+		.card-blue::before {
+			background: var(--blue);
+		}
+
+		.card-red::before {
+			background: var(--red);
+		}
+
+		.card-accent::before {
+			background: var(--accent);
+		}
+
+		.card-cyan::before {
+			background: var(--cyan);
+		}
+
+		.card-title {
+			font-size: 13px;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 1.5px;
+			margin-bottom: 16px;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.card-green .card-title {
+			color: var(--green);
+		}
+
+		.card-orange .card-title {
+			color: var(--orange);
+		}
+
+		.card-blue .card-title {
+			color: var(--blue);
+		}
+
+		.card-red .card-title {
+			color: var(--red);
+		}
+
+		.card-accent .card-title {
+			color: var(--accent);
+		}
+
+		.card-cyan .card-title {
+			color: var(--cyan);
+		}
+
+		.script-block {
+			background: var(--surface2);
+			border-radius: 10px;
+			padding: 14px 16px;
+			margin-bottom: 12px;
+			border-left: 3px solid var(--accent);
+			font-size: 14px;
+			line-height: 1.65;
+			color: var(--text);
+		}
+
+		.script-block:last-child {
+			margin-bottom: 0;
+		}
+
+		.script-label {
+			font-family: 'JetBrains Mono', monospace;
+			font-size: 10px;
+			font-weight: 600;
+			letter-spacing: 1px;
+			text-transform: uppercase;
+			margin-bottom: 6px;
+			color: var(--accent);
+		}
+
+		.script-block em {
+			color: var(--text2);
+			font-style: italic;
+			font-size: 12px;
+			display: block;
+			margin-top: 6px;
+		}
+
+		.scenario {
+			background: var(--surface2);
+			border-radius: 10px;
+			padding: 14px 16px;
+			margin-bottom: 10px;
+		}
+
+		.scenario:last-child {
+			margin-bottom: 0;
+		}
+
+		.scenario-trigger {
+			font-family: 'JetBrains Mono', monospace;
+			font-size: 12px;
+			font-weight: 600;
+			margin-bottom: 8px;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.scenario-response {
+			font-size: 13.5px;
+			line-height: 1.6;
+			color: var(--text);
+			padding-left: 22px;
+			border-left: 2px solid var(--border);
+		}
+
+		.tag {
+			display: inline-block;
+			font-size: 10px;
+			font-weight: 600;
+			padding: 2px 8px;
+			border-radius: 4px;
+			font-family: 'JetBrains Mono', monospace;
+			letter-spacing: 0.5px;
+		}
+
+		.tag-green {
+			background: var(--green-bg);
+			color: var(--green);
+		}
+
+		.tag-red {
+			background: var(--red-bg);
+			color: var(--red);
+		}
+
+		.tag-orange {
+			background: var(--orange-bg);
+			color: var(--orange);
+		}
+
+		.tag-blue {
+			background: var(--blue-bg);
+			color: var(--blue);
+		}
+
+		.rule-list {
+			list-style: none;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.rule-list li {
+			font-size: 13.5px;
+			line-height: 1.5;
+			display: flex;
+			align-items: flex-start;
+			gap: 10px;
+		}
+
+		.rule-icon {
+			width: 22px;
+			height: 22px;
+			border-radius: 6px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 12px;
+			flex-shrink: 0;
+			margin-top: 1px;
+		}
+
+		.icon-do {
+			background: var(--green-bg);
+		}
+
+		.icon-dont {
+			background: var(--red-bg);
+		}
+
+		.full-width {
+			grid-column: 1 / -1;
+		}
+
+		.objection-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 10px;
+		}
+
+		.flow-steps {
+			display: flex;
+			gap: 0;
+			align-items: stretch;
+		}
+
+		.flow-step {
+			flex: 1;
+			background: var(--surface2);
+			padding: 14px 12px;
+			text-align: center;
+			position: relative;
+			font-size: 12px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.flow-step:first-child {
+			border-radius: 10px 0 0 10px;
+		}
+
+		.flow-step:last-child {
+			border-radius: 0 10px 10px 0;
+		}
+
+		.flow-step::after {
+			content: '→';
+			position: absolute;
+			right: -8px;
+			top: 50%;
+			transform: translateY(-50%);
+			color: var(--accent);
+			font-weight: 700;
+			z-index: 1;
+			font-size: 14px;
+		}
+
+		.flow-step:last-child::after {
+			display: none;
+		}
+
+		.flow-num {
+			width: 26px;
+			height: 26px;
+			border-radius: 50%;
+			background: var(--accent-glow);
+			border: 1.5px solid var(--accent);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-family: 'JetBrains Mono', monospace;
+			font-size: 11px;
+			font-weight: 700;
+			color: var(--accent);
+		}
+
+		.flow-label {
+			font-weight: 600;
+			font-size: 11px;
+			color: var(--text);
+		}
+
+		.flow-detail {
+			font-size: 10px;
+			color: var(--text2);
+			line-height: 1.4;
+		}
+
+		.highlight {
+			background: var(--accent-glow);
+			color: var(--accent);
+			padding: 1px 6px;
+			border-radius: 4px;
+			font-weight: 600;
+		}
+
+		.section-divider {
+			grid-column: 1 / -1;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 4px 0;
+		}
+
+		.section-divider span {
+			font-size: 12px;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 2px;
+			color: var(--text2);
+			white-space: nowrap;
+		}
+
+		.section-divider::before,
+		.section-divider::after {
+			content: '';
+			flex: 1;
+			height: 1px;
+			background: var(--border);
+		}
+
+		.whatsapp-template {
+			background: #1A2E1A;
+			border: 1px solid #2D4A2D;
+			border-radius: 12px;
+			padding: 16px;
+			font-size: 13.5px;
+			line-height: 1.7;
+			color: #D1FAD1;
+			position: relative;
+		}
+
+		.whatsapp-template::before {
+			content: '💬 WhatsApp';
+			font-family: 'JetBrains Mono', monospace;
+			font-size: 10px;
+			font-weight: 600;
+			color: #22C55E;
+			letter-spacing: 1px;
+			display: block;
+			margin-bottom: 10px;
+		}
+
+		.time-badge {
+			font-family: 'JetBrains Mono', monospace;
+			font-size: 11px;
+			color: var(--text2);
+			background: var(--surface2);
+			padding: 3px 8px;
+			border-radius: 5px;
+		}
+
+		@media print {
+			body {
+				background: white;
+				color: #1a1a1a;
+				padding: 16px;
+			}
+
+			.card {
+				border: 1px solid #ddd;
+				page-break-inside: avoid;
+			}
+
+			.script-block {
+				background: #f5f5f5;
+			}
+
+			.scenario {
+				background: #f5f5f5;
+			}
+		}
+	</style>
+</head>
+
+<body>
+
+	<div class="header">
+		<div class="header-left">
+			<div class="logo">T</div>
+			<h1>Temizify <span>Sales Call</span> Script</h1>
+		</div>
+		<div style="display:flex;gap:8px;align-items:center;">
+			<span class="time-badge">🕘 Arama: 09:00–11:00 / 14:00–16:00</span>
+			<span class="time-badge">🎯 Hedef: 30/gün</span>
+		</div>
+	</div>
+
+	<!-- CALL FLOW -->
+	<div class="card full-width card-accent" style="margin-bottom:20px;">
+		<div class="card-title">📞 Arama Akışı</div>
+		<div class="flow-steps">
+			<div class="flow-step">
+				<div class="flow-num">1</div>
+				<div class="flow-label">Açılış</div>
+				<div class="flow-detail">15 saniye izin al</div>
+			</div>
+			<div class="flow-step">
+				<div class="flow-num">2</div>
+				<div class="flow-label">Keşif Sorusu</div>
+				<div class="flow-detail">Nasıl takip ediyorsunuz?</div>
+			</div>
+			<div class="flow-step">
+				<div class="flow-num">3</div>
+				<div class="flow-label">Acıyı Aç</div>
+				<div class="flow-detail">Halı karıştı mı hiç?</div>
+			</div>
+			<div class="flow-step">
+				<div class="flow-num">4</div>
+				<div class="flow-label">Çözüm</div>
+				<div class="flow-detail">Temizify'ı tanıt (20sn)</div>
+			</div>
+			<div class="flow-step">
+				<div class="flow-num">5</div>
+				<div class="flow-label">WhatsApp</div>
+				<div class="flow-detail">Demo videosu at</div>
+			</div>
+			<div class="flow-step">
+				<div class="flow-num">6</div>
+				<div class="flow-label">Follow-up</div>
+				<div class="flow-detail">Tarih belirle</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="grid">
+
+		<!-- AÇILIŞ -->
+		<div class="card card-green">
+			<div class="card-title">🟢 Adım 1 — Açılış (İlk 15 Saniye)</div>
+			<div class="script-block">
+				<div class="script-label">Söyle</div>
+				"Merhaba, ben Burak, Temizify'dan arıyorum. <span class="highlight">15 saniyenizi</span> alabilir miyim?
+				Halı yıkama işletmelerine hizmet veriyoruz, size uygun olup olmadığını anlamak istiyorum."
+				<em>→ İzin iste, süre ver, satış değil "uyum kontrolü" olduğunu hissettir</em>
+			</div>
+			<div class="script-block">
+				<div class="script-label">Adam "Buyur" derse</div>
+				"Kısa bir sorum var — şu an siparişlerinizi nasıl takip ediyorsunuz? Defter mi, program mı?"
+				<em>→ Bu soru her şeyi açar. Sus ve dinle.</em>
+			</div>
+		</div>
+
+		<!-- SENARYOLAR -->
+		<div class="card card-orange">
+			<div class="card-title">🔀 Adım 2 — Cevaba Göre Dallan</div>
+
+			<div class="scenario">
+				<div class="scenario-trigger">
+					<span class="tag tag-orange">DEFTER / KAĞIT</span> derse
+				</div>
+				<div class="scenario-response">
+					"Anladım, çoğu işletme öyle. Peki hiç halı karışması yaşadınız mı? Müşterinin halısı kayboldu
+					falan?"
+					<br><br>
+					→ Evet derse: <strong>"İşte biz tam bunu çözen bir uygulama geliştirdik..."</strong>
+				</div>
+			</div>
+
+			<div class="scenario">
+				<div class="scenario-trigger">
+					<span class="tag tag-blue">PROGRAM VAR</span> derse
+				</div>
+				<div class="scenario-response">
+					"Hangi programı kullanıyorsunuz?" → Dinle.
+					<br>
+					"Memnun musunuz genel olarak?"
+					<br><br>
+					→ Memnun değilse: "Ne sıkıntı yaşıyorsunuz?"
+					<br>
+					→ Memnunsa: "Süper, rahatsız etmeyeyim. İzin verirseniz kısa tanıtım videomuz var, WhatsApp'tan
+					atayım bir bakarsınız."
+				</div>
+			</div>
+
+			<div class="scenario">
+				<div class="scenario-trigger">
+					<span class="tag tag-red">İLGİLENMİYORUM</span> derse
+				</div>
+				<div class="scenario-response">
+					"Tamam, rahatsız etmek istemem. Sadece bir şey sorayım — neden ilgilenmiyorsunuz? Belki
+					haklısınızdır, belki yanlış anlatıyorumdur."
+					<em style="color:var(--orange)">→ %30'u geri döner ve dinler</em>
+				</div>
+			</div>
+		</div>
+
+		<div class="section-divider"><span>İlgi Varsa</span></div>
+
+		<!-- ÇÖZÜM -->
+		<div class="card card-blue">
+			<div class="card-title">💡 Adım 3 — Temizify'ı Anlat (Max 30 Saniye)</div>
+			<div class="script-block">
+				<div class="script-label">Söyle</div>
+				"Biz halı yıkama işletmeleri için bir mobil uygulama geliştirdik. Sahadayken halıya <span
+					class="highlight">etiket basıyorsunuz</span>, müşteriye <span class="highlight">otomatik SMS</span>
+				gidiyor, teslimat için <span class="highlight">en kısa rotayı</span> çıkarıyor. Defter kağıt tarihe
+				karışıyor."
+				<em>→ 3 özellik yeter. Daha fazla anlatma, merak uyandır.</em>
+			</div>
+			<div class="script-block">
+				<div class="script-label">Geçiş</div>
+				"Size WhatsApp'tan <span class="highlight">1 dakikalık demo videosu</span> atayım, canlı görürsünüz
+				nasıl çalıştığını. Numaranız bu mu?"
+				<em>→ Amaç: telefonu demo videoya bağlamak, telefonda satış kapatmaya çalışma</em>
+			</div>
+		</div>
+
+		<!-- WHATSAPP FOLLOW UP -->
+		<div class="card card-green">
+			<div class="card-title">📱 Adım 4 — WhatsApp Mesajı</div>
+			<div class="whatsapp-template">
+				Merhaba [isim] bey, ben Burak, az önce konuştuk. 👋
+				<br><br>
+				Bahsettiğim Temizify uygulamasının 1 dakikalık videosu bu:
+				<br>
+				▶️ [DEMO VİDEO LİNKİ]
+				<br><br>
+				✅ 14 gün ücretsiz deneyebilirsiniz
+				<br>
+				✅ Kurulum 2 dakika
+				<br>
+				✅ İstediğiniz zaman iptal
+				<br><br>
+				Sorularınız olursa ben buradayım.
+			</div>
+		</div>
+
+		<div class="section-divider"><span>İtiraz Yönetimi</span></div>
+
+		<!-- İTİRAZLAR -->
+		<div class="card full-width card-red">
+			<div class="card-title">🛡️ İtirazlar ve Cevapları</div>
+			<div class="objection-grid">
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">💰</span> "Fiyatı ne? / Pahalı"
+					</div>
+					<div class="scenario-response">
+						"Fiyattan önce size uygun mu onu görelim. 14 gün tamamen ücretsiz, beğenmezseniz 1 kuruş
+						ödemezsiniz. Önce deneyin, fiyatı sonra konuşuruz."
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">📋</span> "Defter yeterli bize"
+					</div>
+					<div class="scenario-response">
+						"Defter güzel ama müşteriniz 'halım nerede' diye aradığında ne yapıyorsunuz? Bir de defter
+						kaybolsa, yansa? Bu uygulama hem anlık takip hem yedek."
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">🤷</span> "Teknoloji bilmiyorum"
+					</div>
+					<div class="scenario-response">
+						"WhatsApp kullanıyor musunuz? Ondan daha kolay. Zaten biz kurulumu birlikte yapıyoruz, 10
+						dakikada hazır."
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">⏰</span> "Düşünüp döneyim"
+					</div>
+					<div class="scenario-response">
+						"Tabii ki. Size Perşembe tekrar arayabilir miyim? Bir de WhatsApp'tan videoyu atayım, arada bir
+						bakarsınız."
+						<em style="color:var(--orange)">→ Somut tarih al, asla "siz arayın" deme</em>
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">🏢</span> "Patron yok / ben karar veremem"
+					</div>
+					<div class="scenario-response">
+						"Anlıyorum. Patron hangi saatlerde olur genelde? Onu ne zaman arasam uygun olur?"
+						<em style="color:var(--orange)">→ İsim ve saat al, tekrar ara</em>
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">🔒</span> "Veriler güvende mi?"
+					</div>
+					<div class="scenario-response">
+						"Verileriniz Microsoft altyapısında, bankalar da aynı sistemi kullanıyor. Her işletme kendi
+						kasası gibi izole, başkası göremez. Kağıt defterden çok daha güvenli."
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">⚔️</span> "Başka program kullanıyorum"
+					</div>
+					<div class="scenario-response">
+						"Süper, hangi programı kullanıyorsunuz?" → Dinle. "Memnun musunuz? Sahada etiket basma ve rota
+						optimizasyonu da var mı?"
+						<em style="color:var(--orange)">→ Rakibin yapamadığı özelliği vurgula</em>
+					</div>
+				</div>
+
+				<div class="scenario">
+					<div class="scenario-trigger">
+						<span class="tag tag-red">🚫</span> Direk kapatırsa
+					</div>
+					<div class="scenario-response">
+						Sorun yok, not al "ilgisiz" olarak kaydet. Ama 45-60 gün sonra tekrar aranabilir listesine ekle.
+						İnsanlar değişir.
+					</div>
+				</div>
+
+			</div>
+		</div>
+
+		<div class="section-divider"><span>Kurallar</span></div>
+
+		<!-- ALTIN KURALLAR -->
+		<div class="card card-cyan">
+			<div class="card-title">✅ Yap</div>
+			<ul class="rule-list">
+				<li><span class="rule-icon icon-do">✓</span> Her aramadan sonra sonucu hemen sisteme gir</li>
+				<li><span class="rule-icon icon-do">✓</span> WhatsApp mesajını 5 dakika içinde at</li>
+				<li><span class="rule-icon icon-do">✓</span> Gülümse — ses tonuna yansır</li>
+				<li><span class="rule-icon icon-do">✓</span> Adam konuşurken sus, not al</li>
+				<li><span class="rule-icon icon-do">✓</span> "Size uygun olup olmadığını anlamak istiyorum" — her zaman
+					bu çerçeve</li>
+				<li><span class="rule-icon icon-do">✓</span> İlk 50 aramayı öğrenme olarak gör, mükemmel olma</li>
+				<li><span class="rule-icon icon-do">✓</span> Reddi kişisel alma — 100 aramada 5-10 müşteri çok iyi sonuç
+				</li>
+			</ul>
+		</div>
+
+		<div class="card card-red">
+			<div class="card-title">❌ Yapma</div>
+			<ul class="rule-list">
+				<li><span class="rule-icon icon-dont">✗</span> Telefonda fiyat verme</li>
+				<li><span class="rule-icon icon-dont">✗</span> Rakip adı anma, kötüleme</li>
+				<li><span class="rule-icon icon-dont">✗</span> 3'ten fazla özellik sayma — etiket, SMS, rota yeter</li>
+				<li><span class="rule-icon icon-dont">✗</span> "Biz en iyisiyiz" deme</li>
+				<li><span class="rule-icon icon-dont">✗</span> "Siz bizi arayın" deme — her zaman sen ara</li>
+				<li><span class="rule-icon icon-dont">✗</span> Teknik jargon kullanma (backend, cloud, API...)</li>
+				<li><span class="rule-icon icon-dont">✗</span> 2 dakikadan uzun konuşmaya çalışma — amacın demo videoya
+					köprü kurmak</li>
+			</ul>
+		</div>
+
+	</div>
+
+</body>
+
+</html>

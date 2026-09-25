@@ -1,0 +1,18 @@
+# Instagram satış ajanı bağımlılıkları
+# Kurulum:
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r ig_agent/requirements.txt
+#   python -m playwright install chromium
+
+openai>=1.30
+playwright>=1.44
+requests>=2.31
+python-dotenv>=1.0
+gspread>=6.0
+google-auth>=2.29
+
+# Kontrol paneli (mevcut CRM ile ortak)
+streamlit>=1.30
+
+# Test
+pytest>=8.0

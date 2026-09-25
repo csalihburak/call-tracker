@@ -1,0 +1,60 @@
+2026/09/24-12:20:57.836 659b25 Reusing MANIFEST /Users/salihburakcoskun/Desktop/call-tracker/.ig_profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/09/24-12:20:57.840 659b25 Recovering log #11
+2026/09/24-12:20:57.841 659b25 Reusing old log /Users/salihburakcoskun/Desktop/call-tracker/.ig_profile/Default/Local Storage/leveldb/000011.log 
+2026/09/24-12:21:10.160 659b28 Level-0 table #15: started
+2026/09/24-12:21:10.164 659b28 Level-0 table #15: 17178 bytes OK
+2026/09/24-12:21:10.169 659b28 Delete type=0 #11
+2026/09/24-13:21:58.859 659b2a Level-0 table #17: started
+2026/09/24-13:21:58.866 659b2a Level-0 table #17: 11006 bytes OK
+2026/09/24-13:21:58.872 659b2a Delete type=0 #14
+2026/09/24-13:21:58.875 659b2a Compacting 4@0 + 1@1 files
+2026/09/24-13:21:58.883 659b2a Generated table #18@0: 917 keys, 61414 bytes
+2026/09/24-13:21:58.884 659b2a Compacted 4@0 + 1@1 files => 61414 bytes
+2026/09/24-13:21:58.886 659b2a compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/09/24-13:21:58.886 659b2a Delete type=2 #15
+2026/09/24-13:21:58.887 659b2a Delete type=2 #17
+2026/09/24-13:21:58.887 659b2a Delete type=2 #12
+2026/09/24-13:21:58.887 659b2a Delete type=2 #10
+2026/09/24-13:21:58.887 659b2a Delete type=2 #8
+2026/09/24-14:21:54.477 659b28 Level-0 table #20: started
+2026/09/24-14:21:54.485 659b28 Level-0 table #20: 11262 bytes OK
+2026/09/24-14:21:54.489 659b28 Delete type=0 #16
+2026/09/24-15:45:38.586 659b28 Level-0 table #22: started
+2026/09/24-15:45:38.590 659b28 Level-0 table #22: 10775 bytes OK
+2026/09/24-15:45:38.594 659b28 Delete type=0 #19
+2026/09/24-16:41:38.719 659b28 Level-0 table #24: started
+2026/09/24-16:41:38.726 659b28 Level-0 table #24: 10117 bytes OK
+2026/09/24-16:41:38.730 659b28 Delete type=0 #21
+2026/09/24-17:33:38.647 659b28 Level-0 table #26: started
+2026/09/24-17:33:38.650 659b28 Level-0 table #26: 10078 bytes OK
+2026/09/24-17:33:38.655 659b28 Delete type=0 #23
+2026/09/24-17:33:38.658 659b28 Compacting 4@0 + 1@1 files
+2026/09/24-17:33:38.665 659b28 Generated table #27@0: 1063 keys, 73819 bytes
+2026/09/24-17:33:38.665 659b28 Compacted 4@0 + 1@1 files => 73819 bytes
+2026/09/24-17:33:38.666 659b28 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/09/24-17:33:38.667 659b28 Delete type=2 #20
+2026/09/24-17:33:38.667 659b28 Delete type=2 #22
+2026/09/24-17:33:38.667 659b28 Delete type=2 #26
+2026/09/24-17:33:38.667 659b28 Delete type=2 #18
+2026/09/24-17:33:38.667 659b28 Delete type=2 #24
+2026/09/24-18:20:57.653 659b28 Level-0 table #29: started
+2026/09/24-18:20:57.657 659b28 Level-0 table #29: 10534 bytes OK
+2026/09/24-18:20:57.661 659b28 Delete type=0 #25
+2026/09/24-18:49:58.876 659b28 Level-0 table #31: started
+2026/09/24-18:49:58.879 659b28 Level-0 table #31: 13593 bytes OK
+2026/09/24-18:49:58.882 659b28 Delete type=0 #28
+2026/09/24-19:09:38.754 659b28 Level-0 table #33: started
+2026/09/24-19:09:38.758 659b28 Level-0 table #33: 12306 bytes OK
+2026/09/24-19:09:38.761 659b28 Delete type=0 #30
+2026/09/24-19:26:38.774 659b28 Level-0 table #35: started
+2026/09/24-19:26:38.778 659b28 Level-0 table #35: 12329 bytes OK
+2026/09/24-19:26:38.781 659b28 Delete type=0 #32
+2026/09/24-19:26:38.783 659b28 Compacting 4@0 + 1@1 files
+2026/09/24-19:26:38.792 659b28 Generated table #36@0: 1350 keys, 96118 bytes
+2026/09/24-19:26:38.792 659b28 Compacted 4@0 + 1@1 files => 96118 bytes
+2026/09/24-19:26:38.794 659b28 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/09/24-19:26:38.794 659b28 Delete type=2 #29
+2026/09/24-19:26:38.794 659b28 Delete type=2 #35
+2026/09/24-19:26:38.794 659b28 Delete type=2 #33
+2026/09/24-19:26:38.795 659b28 Delete type=2 #27
+2026/09/24-19:26:38.795 659b28 Delete type=2 #31

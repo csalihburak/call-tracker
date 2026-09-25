@@ -1,0 +1,426 @@
+{
+  "generated_at": "2026-04-30T10:52:53.678151+00:00",
+  "scope": {
+    "host": "www.halipratik.com",
+    "app_version": "1.10.32",
+    "mno_samples": [
+      1
+    ]
+  },
+  "checks": {
+    "security_headers": {
+      "missing": [
+        "strict-transport-security",
+        "content-security-policy",
+        "x-content-type-options",
+        "x-frame-options",
+        "referrer-policy",
+        "permissions-policy"
+      ],
+      "exposed": {
+        "server": "Microsoft-IIS/10.0",
+        "x-powered-by": "ASP.NET",
+        "x-aspnet-version": "4.0.30319"
+      },
+      "response": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 1575.01,
+        "body_bytes": 14
+      }
+    },
+    "auth_matrix": {
+      "valid": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 222.83,
+        "body_bytes": 300,
+        "customer_count": 1,
+        "redirect": null
+      },
+      "fake": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 271.51,
+        "body_bytes": 14,
+        "customer_count": 0,
+        "redirect": null
+      },
+      "blank": {
+        "status_code": 302,
+        "content_type": "text/html; charset=windows-1254",
+        "elapsed_ms": 196.79,
+        "body_bytes": 213,
+        "customer_count": 0,
+        "redirect": "/Supplier/Design/Pages/PageError.aspx?aspxerrorpath=/supplier/Design/Android/SearchCustomer.aspx"
+      },
+      "malformed": {
+        "status_code": 302,
+        "content_type": "text/html; charset=windows-1254",
+        "elapsed_ms": 220.45,
+        "body_bytes": 213,
+        "customer_count": 0,
+        "redirect": "/Supplier/Design/Pages/PageError.aspx?aspxerrorpath=/supplier/Design/Android/SearchCustomer.aspx"
+      },
+      "sqli_in_userid": {
+        "status_code": 302,
+        "content_type": "text/html; charset=windows-1254",
+        "elapsed_ms": 194.68,
+        "body_bytes": 213,
+        "customer_count": 0,
+        "redirect": "/Supplier/Design/Pages/PageError.aspx?aspxerrorpath=/supplier/Design/Android/SearchCustomer.aspx"
+      }
+    },
+    "http_methods": {
+      "OPTIONS": {
+        "status_code": 200,
+        "content_type": null,
+        "elapsed_ms": 184.73,
+        "body_bytes": 0,
+        "allow": "OPTIONS, TRACE, GET, HEAD, POST"
+      },
+      "PUT": {
+        "status_code": 405,
+        "content_type": null,
+        "elapsed_ms": 460.89,
+        "body_bytes": 0
+      },
+      "DELETE": {
+        "status_code": 405,
+        "content_type": null,
+        "elapsed_ms": 230.54,
+        "body_bytes": 0
+      },
+      "PATCH": {
+        "status_code": 405,
+        "content_type": null,
+        "elapsed_ms": 211.97,
+        "body_bytes": 0
+      },
+      "TRACE": {
+        "status_code": 501,
+        "content_type": null,
+        "elapsed_ms": 215.75,
+        "body_bytes": 0
+      },
+      "HEAD": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 259.21,
+        "body_bytes": 0
+      }
+    },
+    "parameter_tampering": {
+      "type=''": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 222.67,
+        "body_bytes": 14
+      },
+      "type='*'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 285.32,
+        "body_bytes": 14
+      },
+      "type='all'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 495.96,
+        "body_bytes": 14
+      },
+      "type='name'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 967.32,
+        "body_bytes": 270
+      },
+      "type='phone'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 773.08,
+        "body_bytes": 14
+      },
+      "type='id'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 378.79,
+        "body_bytes": 14
+      },
+      "extra=['admin']": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 206.64,
+        "body_bytes": 300
+      },
+      "extra=['debug']": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 209.6,
+        "body_bytes": 300
+      },
+      "extra=['test']": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 293.53,
+        "body_bytes": 300
+      },
+      "extra=['limit']": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 203.78,
+        "body_bytes": 300
+      },
+      "extra=['page', 'pageSize']": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 222.14,
+        "body_bytes": 300
+      },
+      "ver=''": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 195.09,
+        "body_bytes": 300
+      },
+      "ver='0.0.1'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 441.56,
+        "body_bytes": 300
+      },
+      "ver='9.9.9'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 197.28,
+        "body_bytes": 300
+      },
+      "ver='DROP TABLE'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 231.5,
+        "body_bytes": 300
+      }
+    },
+    "sql_injection": {
+      "'": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 232.44,
+        "body_bytes": 14,
+        "error_signs": []
+      },
+      "''": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 198.3,
+        "body_bytes": 14,
+        "error_signs": []
+      },
+      "1 AND 1=1": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 272.63,
+        "body_bytes": 14,
+        "error_signs": []
+      },
+      "1 AND 1=2": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 418.0,
+        "body_bytes": 14,
+        "error_signs": []
+      },
+      "1' OR '1'='1": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 275.17,
+        "body_bytes": 14,
+        "error_signs": []
+      },
+      "1; --": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 219.58,
+        "body_bytes": 14,
+        "error_signs": []
+      }
+    },
+    "bypass_headers": {
+      "X-Forwarded-For": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 195.51,
+        "body_bytes": 14,
+        "customer_count": 0
+      },
+      "X-Real-IP": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 194.73,
+        "body_bytes": 14,
+        "customer_count": 0
+      },
+      "X-Originating-IP": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 204.35,
+        "body_bytes": 14,
+        "customer_count": 0
+      },
+      "X-Host": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 240.29,
+        "body_bytes": 14,
+        "customer_count": 0
+      },
+      "X-Forwarded-Host": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 206.31,
+        "body_bytes": 14,
+        "customer_count": 0
+      },
+      "X-Original-URL": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 195.34,
+        "body_bytes": 14,
+        "customer_count": 0
+      },
+      "X-Rewrite-URL": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 240.36,
+        "body_bytes": 14,
+        "customer_count": 0
+      }
+    },
+    "path_probes": {
+      "/supplier/Design/Android/SearchCustomer.aspx/": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 220.91,
+        "body_bytes": 300
+      },
+      "/supplier/design/android/SearchCustomer.aspx": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 487.91,
+        "body_bytes": 300
+      },
+      "/SUPPLIER/DESIGN/ANDROID/SearchCustomer.aspx": {
+        "status_code": 200,
+        "content_type": "application/json; charset=utf-8",
+        "elapsed_ms": 299.7,
+        "body_bytes": 300
+      }
+    },
+    "info_disclosure": {
+      "/robots.txt": {
+        "status_code": 200,
+        "content_type": "text/plain",
+        "elapsed_ms": 163.42,
+        "body_bytes": 75,
+        "preview": "ï»¿User-agent: *\r\nDisallow: /ScriptResource.axd\r\nDisallow: /WebResource.axd"
+      },
+      "/sitemap.xml": {
+        "status_code": 200,
+        "content_type": "text/xml",
+        "elapsed_ms": 223.73,
+        "body_bytes": 32715,
+        "preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<urlset xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/si"
+      },
+      "/trace.axd": {
+        "status_code": 302,
+        "content_type": "text/html; charset=windows-1254",
+        "elapsed_ms": 207.64,
+        "body_bytes": 179,
+        "preview": null
+      }
+    },
+    "subdomains": {},
+    "tls": {
+      "tls_version": "TLSv1.3",
+      "cipher": [
+        "TLS_AES_256_GCM_SHA384",
+        "TLSv1.3",
+        256
+      ],
+      "cert_issuer": {
+        "countryName": "GB",
+        "organizationName": "Sectigo Limited",
+        "commonName": "Sectigo Public Server Authentication CA DV R36"
+      },
+      "cert_subject": {
+        "commonName": "halipratik.com"
+      },
+      "cert_not_after": "Nov  7 23:59:59 2026 GMT",
+      "cert_not_before": "Oct  7 00:00:00 2025 GMT"
+    },
+    "timing": {
+      "existing_avg_ms": 668.6,
+      "nonexistent_avg_ms": 249.95,
+      "delta_ms": 418.65000000000003
+    }
+  },
+  "findings": [
+    {
+      "title": "Missing security headers",
+      "severity": "medium",
+      "evidence": {
+        "missing": [
+          "strict-transport-security",
+          "content-security-policy",
+          "x-content-type-options",
+          "x-frame-options",
+          "referrer-policy",
+          "permissions-policy"
+        ]
+      }
+    },
+    {
+      "title": "Technology fingerprint exposed",
+      "severity": "low",
+      "evidence": {
+        "server": "Microsoft-IIS/10.0",
+        "x-powered-by": "ASP.NET",
+        "x-aspnet-version": "4.0.30319"
+      }
+    },
+    {
+      "title": "Invalid userid accepted by API",
+      "severity": "critical",
+      "evidence": {
+        "status": 200,
+        "expected": 401
+      }
+    },
+    {
+      "title": "Public file accessible: /robots.txt",
+      "severity": "low",
+      "evidence": {
+        "status": 200,
+        "bytes": 75
+      }
+    },
+    {
+      "title": "Public file accessible: /sitemap.xml",
+      "severity": "low",
+      "evidence": {
+        "status": 200,
+        "bytes": 32715
+      }
+    },
+    {
+      "title": "Timing oracle possible (response-time delta)",
+      "severity": "low",
+      "evidence": {
+        "existing_avg_ms": 668.6,
+        "nonexistent_avg_ms": 249.95,
+        "delta_ms": 418.65000000000003
+      }
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+"""Ortam değişkenlerinden ayarlar.
+
+Hassas değerler (OpenAI anahtarı, backend secret) koda gömülmez; `.env` veya
+gerçek ortam değişkenlerinden okunur. `.env` varsa ve python-dotenv kuruluysa
+otomatik yüklenir; yoksa yalnızca os.environ kullanılır.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+# Proje kökü: bu dosyanın bir üstü (call-tracker/)
+PROJE_KOKU = Path(__file__).resolve().parent.parent
+
+
+def _dotenv_yukle() -> None:
+    """`.env` dosyasını (varsa) ortama yükler. python-dotenv opsiyoneldir."""
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:
+        return
+    env_yolu = PROJE_KOKU / ".env"
+    if env_yolu.exists():
+        load_dotenv(env_yolu)
+
+
+def _str(anahtar: str, varsayilan: str = "") -> str:
+    return os.environ.get(anahtar, varsayilan).strip()
+
+
+def _int(anahtar: str, varsayilan: int) -> int:
+    ham = os.environ.get(anahtar)
+    if ham is None or ham.strip() == "":
+        return varsayilan
+    try:
+        return int(ham)
+    except ValueError:
+        return varsayilan
+
+
+def _float(anahtar: str, varsayilan: float) -> float:
+    ham = os.environ.get(anahtar)
+    if ham is None or ham.strip() == "":
+        return varsayilan
+    try:
+        return float(ham)
+    except ValueError:
+        return varsayilan
+
+
+def _liste(anahtar: str, varsayilan: list[str]) -> list[str]:
+    ham = os.environ.get(anahtar)
+    if not ham:
+        return list(varsayilan)
+    return [parca.strip() for parca in ham.split(",") if parca.strip()]
+
+
+# Keşif için varsayılan hedefler — şimdilik SADECE halı yıkama
+VARSAYILAN_HASHTAGLER = [
+    "haliyikama",
+    "haliyıkama",
+    "haliyikamaci",
+    "profesyonelhaliyikama",
+]
+
+VARSAYILAN_SEHIRLER = [
+    "istanbul",
+    "ankara",
+    "izmir",
+    "bursa",
+    "konya",
+    "kayseri",
+    "antalya",
+    "adana",
+]
+
+
+@dataclass
+class GptAyarlari:
+    api_anahtari: str = ""
+    model: str = "gpt-4o"
+    sicaklik: float = 0.7
+    max_token: int = 500
+
+
+@dataclass
+class SheetsAyarlari:
+    # Servis hesabı credentials JSON yolu (Google Cloud'dan indirilen)
+    credentials_yolu: str = ""
+    # Hedef Google Sheet kimliği (URL'deki /d/<ID>/ kısmı)
+    sheet_id: str = ""
+    etkin: bool = False
+
+
+@dataclass
+class BackendAyarlari:
+    # Sıcak lead bildirimi için backend endpoint tabanı, ör. https://api.temizify.com
+    taban_url: str = ""
+    # /internal/sales-alerts için paylaşılan secret (backend guard'ıyla eşleşir)
+    paylasilan_secret: str = ""
+    zaman_asimi_sn: float = 15.0
+
+    @property
+    def etkin(self) -> bool:
+        return bool(self.taban_url and self.paylasilan_secret)
+
+
+@dataclass
+class PacingAyarlari:
+    """Anti-ban hız sınırı ve warmup parametreleri."""
+
+    # Hikaye-yanıtı (açılış) tavanları. 0 = sınırsız.
+    acilis_saatlik: int = 100  # son 60 dakikada en fazla
+    acilis_gunluk: int = 0  # bugün en fazla
+
+    dm_max_gunluk: int = 80  # gönderilen DM yanıtı günlük tavanı
+    kesif_max_gunluk: int = 150  # bir günde kuyruğa eklenecek yeni lead tavanı
+
+    calisma_baslangic_saat: int = 10  # 10:00
+    calisma_bitis_saat: int = 21  # 21:00 (dahil değil)
+
+    # Hikaye tepsisini yeniden gezmeden önce beklenecek süre (saniye)
+    hikaye_turu_cooldown_sn: int = 600
+
+    # Aksiyonlar arası insan benzeri bekleme (saniye)
+    aksiyon_bekleme_min: float = 45.0
+    aksiyon_bekleme_max: float = 180.0
+    # Yazma simülasyonu: karakter başına saniye aralığı
+    yazma_min_kar_sn: float = 0.04
+    yazma_max_kar_sn: float = 0.12
+
+
+@dataclass
+class Ayarlar:
+    veritabani_yolu: str = str(PROJE_KOKU / "sales.db")
+    # Playwright kalıcı profil dizini (IG oturumu burada saklanır)
+    tarayici_profil_dizini: str = str(PROJE_KOKU / ".ig_profile")
+    headless: bool = False  # IG için daima headful önerilir
+
+    hashtagler: list[str] = field(default_factory=lambda: list(VARSAYILAN_HASHTAGLER))
+    sehirler: list[str] = field(default_factory=lambda: list(VARSAYILAN_SEHIRLER))
+
+    # WhatsApp yönlendirme için işletme numarası / linki
+    whatsapp_numarasi: str = ""
+    whatsapp_link: str = ""
+
+    # Bu kadar gün içinde mesaj attığımız hesaba yeniden açılış YAPMA
+    yeniden_iletisim_gun: int = 30
+
+    # Açılış metni: "gpt" → her hikayeye GPT ile çeşitlendirilmiş metin,
+    # "sabit" → `acilis_metinleri` satırlarından rastgele biri
+    acilis_modu: str = "gpt"
+    acilis_metinleri: str = ""
+
+    gpt: GptAyarlari = field(default_factory=GptAyarlari)
+    sheets: SheetsAyarlari = field(default_factory=SheetsAyarlari)
+    backend: BackendAyarlari = field(default_factory=BackendAyarlari)
+    pacing: PacingAyarlari = field(default_factory=PacingAyarlari)
+
+
+def ayarlari_yukle() -> Ayarlar:
+    """Ortamdan tam ayar nesnesini üretir."""
+    _dotenv_yukle()
+
+    return Ayarlar(
+        veritabani_yolu=_str("IG_DB_YOLU", str(PROJE_KOKU / "sales.db")),
+        tarayici_profil_dizini=_str(
+            "IG_PROFIL_DIZINI", str(PROJE_KOKU / ".ig_profile")
+        ),
+        headless=_str("IG_HEADLESS", "0") in ("1", "true", "True"),
+        hashtagler=_liste("IG_HASHTAGLER", VARSAYILAN_HASHTAGLER),
+        sehirler=_liste("IG_SEHIRLER", VARSAYILAN_SEHIRLER),
+        whatsapp_numarasi=_str("IG_WHATSAPP_NUMARASI"),
+        whatsapp_link=_str("IG_WHATSAPP_LINK"),
+        yeniden_iletisim_gun=_int("IG_YENIDEN_ILETISIM_GUN", 30),
+        acilis_modu=_str("IG_ACILIS_MODU", "gpt"),
+        gpt=GptAyarlari(
+            api_anahtari=_str("OPENAI_API_KEY"),
+            model=_str("IG_GPT_MODEL", "gpt-4o"),
+            sicaklik=_float("IG_GPT_SICAKLIK", 0.7),
+            max_token=_int("IG_GPT_MAX_TOKEN", 500),
+        ),
+        sheets=SheetsAyarlari(
+            credentials_yolu=_str("IG_SHEETS_CREDENTIALS"),
+            sheet_id=_str("IG_SHEETS_ID"),
+            etkin=_str("IG_SHEETS_ETKIN", "0") in ("1", "true", "True"),
+        ),
+        backend=BackendAyarlari(
+            taban_url=_str("IG_BACKEND_URL"),
+            paylasilan_secret=_str("IG_BACKEND_SECRET"),
+            zaman_asimi_sn=_float("IG_BACKEND_ZAMAN_ASIMI", 15.0),
+        ),
+        pacing=PacingAyarlari(
+            acilis_saatlik=_int("IG_ACILIS_SAATLIK", 100),
+            acilis_gunluk=_int("IG_ACILIS_GUNLUK", 0),
+            dm_max_gunluk=_int("IG_DM_MAX", 80),
+            kesif_max_gunluk=_int("IG_KESIF_MAX", 150),
+            calisma_baslangic_saat=_int("IG_CALISMA_BASLANGIC", 10),
+            calisma_bitis_saat=_int("IG_CALISMA_BITIS", 21),
+            hikaye_turu_cooldown_sn=_int("IG_HIKAYE_COOLDOWN_SN", 600),
+            aksiyon_bekleme_min=_float("IG_BEKLEME_MIN", 45.0),
+            aksiyon_bekleme_max=_float("IG_BEKLEME_MAX", 180.0),
+        ),
+    )
