@@ -570,3 +570,101 @@ def test_onceki_sohbet_dnc_ye_eklenir_gonderilmis_sayilmaz(ortam):
     assert _dm_turu(conn, ayarlar, ist) == 1
     assert repo.dnc_mi(conn, "musteri")
     assert {d["handle"]: d["reason"] for d in repo.dnc_listesi(conn)}["musteri"] == "onceki_sohbet"
+
+
+# --------------------------------------------------------------------------- #
+# TikTok süreci: platformlu anahtarlar/kotalar (parça B)
+# --------------------------------------------------------------------------- #
+import random  # noqa: E402
+
+
+class SahteTikTok(SahteDMIstemci):
+    platform = "tiktok"
+
+
+def test_tiktok_dm_turu_kendi_kotasi_ve_anahtarlari(ortam):
+    conn, ayarlar, _ = ortam
+    ayarlar.pacing.dm_acilis_saatlik, ayarlar.pacing.dm_acilis_gunluk = 2, 0
+    for h in ("ig1", "ig2"):  # IG'de 2 DM: TikTok kotasını tüketmemeli
+        repo.mesaj_ekle(conn, repo.lead_upsert(conn, platform="instagram", handle=h), "dm_opener", "x")
+    ist = SahteTikTok(["ig1", "t2", "t3"])  # IG'de yazılan hesap TikTok'ta yeni
+    assert _dm_turu(conn, ayarlar, ist) == 2
+    assert ist.gonderilen == ["ig1", "t2"]
+    assert repo.lead_getir_platform(conn, "tiktok", "ig1")["source"] == "TikTok"
+    assert repo.son_saat_dm_acilis_sayisi(conn, "tiktok") == 2
+    assert repo.son_saat_dm_acilis_sayisi(conn) == 2
+    assert repo.durum_getir(conn, "tiktok:son_dm_turu")
+    assert repo.durum_getir(conn, "son_dm_turu") == ""
+
+
+def test_tiktok_duraklatma_yalniz_kendi_bayragi(ortam):
+    conn, ayarlar, _ = ortam
+    repo.durum_ayarla(conn, "master_paused", "1")  # IG duraklatılmış
+    assert _dm_turu(conn, ayarlar, SahteTikTok(["a"])) == 1
+    repo.durum_ayarla(conn, "master_paused", "1", platform="tiktok")
+    assert _dm_turu(conn, ayarlar, SahteTikTok(["b"])) == 0
+
+
+def test_tiktok_dm_kapali_kendi_platformunda_dnc(ortam):
+    conn, ayarlar, _ = ortam
+    _dm_turu(conn, ayarlar, SahteTikTok(["k"], sonuclar={"k": GonderimSonucu.DM_KAPALI}))
+    assert repo.dnc_mi(conn, "k", "tiktok") and not repo.dnc_mi(conn, "k")
+
+
+def test_tiktok_acilis_baglami(ortam):
+    conn, ayarlar, _ = ortam
+
+    class Beyin:
+        def __init__(self):
+            self.baglamlar = []
+
+        def acilis_uret(self, ayarlar, lead, baglam="hikaye"):
+            self.baglamlar.append(baglam)
+            return "selam"
+
+    beyin = Beyin()
+    sch.direkt_dm_turu_yap(conn, ayarlar, SahteTikTok(["a"]), beyin,
+                           uyku_fn=lambda sn: True, simdi_fn=OGLEN)
+    assert beyin.baglamlar == ["tiktok_dm"]
+
+
+def test_tiktok_kotalari_yalniz_direkt_dm(ortam):
+    conn, ayarlar, _ = ortam
+    repo.durum_ayarla(conn, "dm_acilis_aktif", "1", platform="tiktok")
+    kotalar = sch.kota_durumlari(conn, ayarlar, "tiktok")
+    assert [k.tur for k in kotalar] == [sch.DIRECT_DM]
+    assert kotalar[0].tavan == ayarlar.pacing.dm_acilis_saatlik
+    repo.durum_ayarla(conn, "dm_acilis_aktif", "0", platform="tiktok")
+    assert sch.kota_durumlari(conn, ayarlar, "tiktok")[0].tavan == 0
+
+
+class _Oglen(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 9, 24, 12, 0)
+
+
+def test_tek_tur_tiktok_yalniz_dm_yapar(ortam, monkeypatch):
+    conn, ayarlar, _ = ortam  # fixture'da IG'de yanıt bekleyen gelen mesaj var
+    monkeypatch.setattr(sch, "datetime", _Oglen)
+    monkeypatch.setattr(sch, "uyku", lambda *a, **k: True)
+    repo.durum_ayarla(conn, "master_paused", "0", platform="tiktok")
+    repo.durum_ayarla(conn, "dm_acilis_aktif", "1", platform="tiktok")
+    ist = SahteTikTok(["t1"])
+    ist.dm_gonder = lambda *a: pytest.fail("TikTok'ta RESPOND çalışmamalı")
+    assert sch.tek_tur(conn, ayarlar, ist, object(), SahteBildirim(), random.Random(0)) == sch.DIRECT_DM
+    assert ist.gonderilen == ["t1"]
+    assert repo.durum_getir(conn, "tiktok:bot_durum")
+    # DM turu soğumada: iş yok (IG'nin yanıt kuyruğu TikTok'u ilgilendirmez)
+    assert sch.tek_tur(conn, ayarlar, ist, object(), SahteBildirim(), random.Random(0)) is None
+
+
+def test_engel_tiktok_yalniz_kendini_duraklatir(ortam):
+    conn, _, _ = ortam
+    ist = SahteTikTok([])
+    ist.engel_algilandi = True
+    assert sch.engel_isaretle(conn, ist)
+    assert repo.bayrak_getir(conn, "action_block", platform="tiktok")
+    assert repo.bayrak_getir(conn, "master_paused", platform="tiktok")
+    assert not repo.bayrak_getir(conn, "action_block")
+    assert "TikTok" in repo.durum_getir(conn, "son_hata", platform="tiktok")

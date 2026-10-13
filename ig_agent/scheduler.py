@@ -17,7 +17,7 @@ from typing import Callable, Optional, Protocol
 
 from . import brain, pacing, repository as repo
 from .config import Ayarlar
-from .platformlar import TURU_BITIR, GonderimSonucu, Hedef
+from .platformlar import PLATFORM_ADI, TURU_BITIR, GonderimSonucu, Hedef, anahtar
 
 # Görev türleri (pacing kotalarıyla aynı adlar)
 RESPOND = "respond"
@@ -92,14 +92,16 @@ def acilis_araligi_sn(ayarlar: Ayarlar, rng: random.Random) -> float:
     return _aralik_sn(ayarlar.pacing.acilis_saatlik, rng)
 
 
-def dm_acilis_kalan(conn: sqlite3.Connection, ayarlar: Ayarlar) -> int:
+def dm_acilis_kalan(
+    conn: sqlite3.Connection, ayarlar: Ayarlar, platform: str = "instagram"
+) -> int:
     """Şu an gönderilebilecek direkt DM açılışı (saatlik ve günlük tavanın küçüğü)."""
     p = ayarlar.pacing
     kalan = SINIRSIZ
     if p.dm_acilis_saatlik > 0:
-        kalan = min(kalan, max(0, p.dm_acilis_saatlik - repo.son_saat_dm_acilis_sayisi(conn)))
+        kalan = min(kalan, max(0, p.dm_acilis_saatlik - repo.son_saat_dm_acilis_sayisi(conn, platform)))
     if p.dm_acilis_gunluk > 0:
-        kalan = min(kalan, max(0, p.dm_acilis_gunluk - repo.bugun_dm_acilis_sayisi(conn)))
+        kalan = min(kalan, max(0, p.dm_acilis_gunluk - repo.bugun_dm_acilis_sayisi(conn, platform)))
     return kalan
 
 
@@ -108,34 +110,45 @@ def dm_acilis_araligi_sn(ayarlar: Ayarlar, rng: random.Random) -> float:
     return _aralik_sn(ayarlar.pacing.dm_acilis_saatlik, rng)
 
 
-def uyku(conn: sqlite3.Connection, sn: float, adim: float = 5.0) -> bool:
+def uyku(
+    conn: sqlite3.Connection, sn: float, adim: float = 5.0, platform: str = "instagram"
+) -> bool:
     """Parça parça uyur ve nabız atar. Duraklatılırsa erken döner (False)."""
     bitis = time.monotonic() + max(0.0, sn)
     while True:
-        if repo.bayrak_getir(conn, "master_paused", True):
+        if repo.bayrak_getir(conn, "master_paused", True, platform=platform):
             return False
-        repo.nabiz_at(conn)
+        repo.nabiz_at(conn, platform=platform)
         kalan = bitis - time.monotonic()
         if kalan <= 0:
             return True
         time.sleep(min(adim, kalan))
 
 
-def kota_durumlari(conn: sqlite3.Connection, ayarlar: Ayarlar) -> list[pacing.KotaDurumu]:
-    """Anlık kota fotoğrafı. Açılış: yapılan = son 60 dk, tavan = yapılan + kalan."""
+def kota_durumlari(
+    conn: sqlite3.Connection, ayarlar: Ayarlar, platform: str = "instagram"
+) -> list[pacing.KotaDurumu]:
+    """Anlık kota fotoğrafı. Açılış: yapılan = son 60 dk, tavan = yapılan + kalan.
+
+    Instagram dışındaki platformlarda yalnızca direkt DM açılışı vardır (yanıt,
+    hikaye turu ve keşif yok).
+    """
     p = ayarlar.pacing
+    # Direkt DM varsayılan KAPALI; panelden (platform başına) açılır.
+    dm_aktif = repo.bayrak_getir(conn, "dm_acilis_aktif", False, platform=platform)
+    son_saat_dm = repo.son_saat_dm_acilis_sayisi(conn, platform)
+    dm_tavan = son_saat_dm + dm_acilis_kalan(conn, ayarlar, platform) if dm_aktif else 0
+    dm_kotasi = pacing.KotaDurumu(DIRECT_DM, son_saat_dm, dm_tavan)
+    if platform != "instagram":
+        return [dm_kotasi]
     son_saat = repo.son_saat_acilis_sayisi(conn)
     # Hashtag keşfi varsayılan KAPALI (story-tepsisi birincil açılış kaynağı).
     kesif_aktif = repo.bayrak_getir(conn, "kesif_aktif", False)
     kesif_tavan = p.kesif_max_gunluk if kesif_aktif else 0
-    # Direkt DM varsayılan KAPALI; panelden açılır.
-    dm_aktif = repo.bayrak_getir(conn, "dm_acilis_aktif", False)
-    son_saat_dm = repo.son_saat_dm_acilis_sayisi(conn)
-    dm_tavan = son_saat_dm + dm_acilis_kalan(conn, ayarlar) if dm_aktif else 0
     return [
         pacing.KotaDurumu(RESPOND, repo.bugun_yanit_sayisi(conn), p.dm_max_gunluk),
         pacing.KotaDurumu(OPENER, son_saat, son_saat + acilis_kalan(conn, ayarlar)),
-        pacing.KotaDurumu(DIRECT_DM, son_saat_dm, dm_tavan),
+        dm_kotasi,
         pacing.KotaDurumu(DISCOVER, repo.bugun_kesif_sayisi(conn), kesif_tavan),
     ]
 
@@ -264,12 +277,14 @@ def direkt_dm_turu_yap(
     `dm_kapali` ile eklenir. Gönderilen DM sayısını döner.
     """
     rng = rng or random.Random()
-    uyku_fn = uyku_fn or (lambda sn: uyku(conn, sn))
     p = ayarlar.pacing
     platform = getattr(istemci, "platform", "instagram")
+    uyku_fn = uyku_fn or (lambda sn: uyku(conn, sn, platform=platform))
+    # Açılış metninin bağlamı: IG "dm", diğerleri "tiktok_dm" gibi
+    baglam = "dm" if platform == "instagram" else f"{platform}_dm"
 
-    if dm_acilis_kalan(conn, ayarlar) <= 0:
-        repo.durum_ayarla(conn, "son_dm_turu", datetime.now().isoformat())
+    if dm_acilis_kalan(conn, ayarlar, platform) <= 0:
+        repo.durum_ayarla(conn, "son_dm_turu", datetime.now().isoformat(), platform=platform)
         print("[dm] direkt DM kotası dolu — tur atlandı")
         return 0
 
@@ -282,13 +297,14 @@ def direkt_dm_turu_yap(
 
     def karar_fn(hedef: Hedef):
         ist["gorulen"] += 1
-        repo.nabiz_at(conn, f"DM turu · @{hedef.handle} · gönderilen {ist['gonderildi']}")
-        if repo.bayrak_getir(conn, "master_paused", False):
+        repo.nabiz_at(conn, f"DM turu · @{hedef.handle} · gönderilen {ist['gonderildi']}",
+                      platform=platform)
+        if repo.bayrak_getir(conn, "master_paused", False, platform=platform):
             return TURU_BITIR
         an = simdi_fn()
         if not pacing.calisma_saatinde_mi(an, p.calisma_baslangic_saat, p.calisma_bitis_saat):
             return TURU_BITIR
-        if dm_acilis_kalan(conn, ayarlar) <= 0:
+        if dm_acilis_kalan(conn, ayarlar, platform) <= 0:
             return TURU_BITIR
         if durum["ardisik_basarisiz"] >= DM_ARDISIK_BASARISIZ_TAVAN:
             return TURU_BITIR
@@ -306,7 +322,7 @@ def direkt_dm_turu_yap(
             return None
         lead = repo.lead_getir_platform(conn, platform, h)
         ist["secildi"] += 1
-        return _acilis_metni(beyin_istemci, ayarlar, lead, rng, baglam="dm")
+        return _acilis_metni(beyin_istemci, ayarlar, lead, rng, baglam=baglam)
 
     def yazmadan_once() -> bool:
         """Bir önceki DM'den (ya da başarısız denemeden) bu yana hedef aralık dolmadıysa bekle."""
@@ -322,7 +338,7 @@ def direkt_dm_turu_yap(
         if referans:
             bekle -= (datetime.now() - referans).total_seconds()
         if bekle > 0:
-            repo.nabiz_at(conn, f"DM turu · tempo beklemesi {int(bekle)} sn")
+            repo.nabiz_at(conn, f"DM turu · tempo beklemesi {int(bekle)} sn", platform=platform)
         return uyku_fn(max(0.0, bekle))
 
     def sonuc_fn(hedef: Hedef, metin: str, sonuc: GonderimSonucu) -> None:
@@ -354,7 +370,7 @@ def direkt_dm_turu_yap(
         damga = datetime.now()
         if durum["ara"]:
             damga -= timedelta(seconds=p.dm_turu_cooldown_sn)
-        repo.durum_ayarla(conn, "son_dm_turu", damga.isoformat())
+        repo.durum_ayarla(conn, "son_dm_turu", damga.isoformat(), platform=platform)
 
     print(
         f"[dm] direkt DM turu{' (ara verildi)' if durum['ara'] else ''}: "
@@ -470,13 +486,15 @@ def karari_uygula(
 # --------------------------------------------------------------------------- #
 # Tarayıcıya bağlı orkestrasyon
 # --------------------------------------------------------------------------- #
-def durum_ozeti(conn: sqlite3.Connection, ayarlar: Ayarlar) -> dict:
-    """Kontrol paneli / log için anlık durum."""
+def durum_ozeti(
+    conn: sqlite3.Connection, ayarlar: Ayarlar, platform: str = "instagram"
+) -> dict:
+    """Kontrol paneli / log için platformun anlık durumu."""
     an = datetime.now()
-    kotalar = kota_durumlari(conn, ayarlar)
-    master = repo.bayrak_getir(conn, "master_paused", True)
-    checkpoint = repo.bayrak_getir(conn, "checkpoint_detected", False)
-    engel = repo.bayrak_getir(conn, "action_block", False)
+    kotalar = kota_durumlari(conn, ayarlar, platform)
+    master = repo.bayrak_getir(conn, "master_paused", True, platform=platform)
+    checkpoint = repo.bayrak_getir(conn, "checkpoint_detected", False, platform=platform)
+    engel = repo.bayrak_getir(conn, "action_block", False, platform=platform)
     izinli = pacing.izin_verilen_aksiyonlar(
         an,
         ayarlar.pacing.calisma_baslangic_saat,
@@ -487,27 +505,31 @@ def durum_ozeti(conn: sqlite3.Connection, ayarlar: Ayarlar) -> dict:
     )
     return {
         "an": an.isoformat(timespec="seconds"),
+        "platform": platform,
         "master_paused": master,
         "checkpoint": checkpoint,
         "action_block": engel,
         "acilis_son_saat": repo.son_saat_acilis_sayisi(conn),
         "acilis_bugun": repo.bugun_acilis_sayisi(conn),
-        "dm_aktif": repo.bayrak_getir(conn, "dm_acilis_aktif", False),
-        "dm_son_saat": repo.son_saat_dm_acilis_sayisi(conn),
-        "dm_bugun": repo.bugun_dm_acilis_sayisi(conn),
+        "dm_aktif": repo.bayrak_getir(conn, "dm_acilis_aktif", False, platform=platform),
+        "dm_son_saat": repo.son_saat_dm_acilis_sayisi(conn, platform),
+        "dm_bugun": repo.bugun_dm_acilis_sayisi(conn, platform),
         "kotalar": {k.tur: {"yapilan": k.yapilan, "tavan": k.tavan, "kalan": k.kalan} for k in kotalar},
         "izinli_aksiyonlar": izinli,
     }
 
 
 def engel_isaretle(conn: sqlite3.Connection, ig) -> bool:
-    """IG action-block gösterdiyse botu duraklat. İşaretlendiyse True döner."""
+    """Platform action-block gösterdiyse YALNIZCA o platformun botunu duraklatır.
+    İşaretlendiyse True döner."""
     if not getattr(ig, "engel_algilandi", False):
         return False
+    platform = getattr(ig, "platform", "instagram")
     ig.engel_algilandi = False  # panelden temizlenince yeniden başlayabilsin
-    repo.durum_ayarla(conn, "action_block", "1")
-    repo.durum_ayarla(conn, "master_paused", "1")
-    repo.hata_kaydet(conn, "Instagram 'işlem engellendi' uyarısı gösterdi — bot duraklatıldı")
+    repo.durum_ayarla(conn, "action_block", "1", platform=platform)
+    repo.durum_ayarla(conn, "master_paused", "1", platform=platform)
+    repo.hata_kaydet(conn, f"{PLATFORM_ADI.get(platform, platform)} 'işlem engellendi' "
+                           "uyarısı gösterdi — bot duraklatıldı", platform=platform)
     print("[bot] ⛔ ACTION BLOCK algılandı — bot duraklatıldı. Limitleri düşürüp "
           "birkaç saat bekledikten sonra panelden temizleyip başlatın.")
     return True
@@ -524,26 +546,32 @@ def tek_tur(
     """Bir zamanlayıcı adımı: görevi seç, uygula, insan beklemesi kadar bekle.
 
     Döndürdüğü: yapılan görev türü ya da None (yapılacak iş yok / duraklatıldı).
+    Bayraklar, kotalar ve nabız istemcinin platformuna aittir; gelen mesaja
+    yanıt (RESPOND) yalnızca Instagram'da, hikaye turu yalnızca hikaye
+    yanıtlayabilen istemcide yapılır.
     """
+    platform = getattr(ig, "platform", "instagram")
     an = datetime.now()
-    kotalar = kota_durumlari(conn, ayarlar)
+    kotalar = kota_durumlari(conn, ayarlar, platform)
     izinli = pacing.izin_verilen_aksiyonlar(
         an,
         ayarlar.pacing.calisma_baslangic_saat,
         ayarlar.pacing.calisma_bitis_saat,
         kotalar,
-        master_duraklatildi=repo.bayrak_getir(conn, "master_paused", True),
+        master_duraklatildi=repo.bayrak_getir(conn, "master_paused", True, platform=platform),
         checkpoint_var=(
-            repo.bayrak_getir(conn, "checkpoint_detected", False)
-            or repo.bayrak_getir(conn, "action_block", False)
+            repo.bayrak_getir(conn, "checkpoint_detected", False, platform=platform)
+            or repo.bayrak_getir(conn, "action_block", False, platform=platform)
         ),
     )
-    yanitlar = repo.yanit_bekleyen_threadler(conn, limit=1)
+    yanitlar = repo.yanit_bekleyen_threadler(conn, limit=1) if platform == "instagram" else []
     yanit_var = bool(yanitlar)
     # Açılış kaynağı artık hikaye tepsisi; soğuma süresi geçtiyse tur yapılabilir
-    acilis_var = _hikaye_turu_zamani(conn, ayarlar.pacing.hikaye_turu_cooldown_sn)
+    acilis_var = hasattr(ig, "hikayeleri_yanitla") and _hikaye_turu_zamani(
+        conn, ayarlar.pacing.hikaye_turu_cooldown_sn
+    )
     dm_var = hasattr(ig, "acilis_turu") and _tur_zamani(
-        conn, "son_dm_turu", ayarlar.pacing.dm_turu_cooldown_sn
+        conn, anahtar(platform, "son_dm_turu"), ayarlar.pacing.dm_turu_cooldown_sn
     )
     gorev = sonraki_gorev(izinli, yanit_var, acilis_var, dm_var)
     if gorev is None:
@@ -567,7 +595,7 @@ def tek_tur(
         repo.nabiz_at(conn, "hikaye turu başlıyor")
         hikaye_turu_yap(conn, ayarlar, ig, beyin_istemci, rng)
     elif gorev == DIRECT_DM:
-        repo.nabiz_at(conn, "direkt DM turu başlıyor")
+        repo.nabiz_at(conn, "direkt DM turu başlıyor", platform=platform)
         direkt_dm_turu_yap(conn, ayarlar, ig, beyin_istemci, rng)
     elif gorev == DISCOVER:
         repo.nabiz_at(conn, "hashtag keşfi")
@@ -575,8 +603,8 @@ def tek_tur(
 
     if engel_isaretle(conn, ig):
         return gorev
-    repo.nabiz_at(conn, f"{gorev} bitti · insan beklemesi")
-    _bekle(conn, rng, ayarlar)
+    repo.nabiz_at(conn, f"{gorev} bitti · insan beklemesi", platform=platform)
+    _bekle(conn, rng, ayarlar, platform)
     return gorev
 
 
@@ -622,8 +650,8 @@ def _kesif_turu(conn, ayarlar, ig) -> None:
         )
 
 
-def _bekle(conn, rng, ayarlar) -> None:
+def _bekle(conn, rng, ayarlar, platform: str = "instagram") -> None:
     sn = pacing.insan_beklemesi_sn(
         rng, ayarlar.pacing.aksiyon_bekleme_min, ayarlar.pacing.aksiyon_bekleme_max
     )
-    uyku(conn, sn)
+    uyku(conn, sn, platform=platform)
