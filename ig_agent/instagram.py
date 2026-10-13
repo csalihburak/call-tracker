@@ -13,14 +13,13 @@ kalıcı profilde saklanır; sonraki çalıştırmalar girişi hatırlar.
 
 from __future__ import annotations
 
-import random
 import re
 import time
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from .config import Ayarlar
 from .platformlar import TURU_BITIR, GonderimSonucu, Hedef  # noqa: F401 — TURU_BITIR dışa verilir
+from .tarayici import TAKIP_ONBELLEK_SN, TarayiciIstemci  # noqa: F401 — dışa verilir
 
 IG_TABAN = "https://www.instagram.com"
 
@@ -31,9 +30,6 @@ _AYRILMIS_YOLLAR = {
 }
 _PROFIL_YOLU = re.compile(r"^/([A-Za-z0-9._]{1,30})/?$")
 
-# Takip listesi bu kadar saniye önbellekte tutulur (her turda baştan kaydırılmasın)
-TAKIP_ONBELLEK_SN = 3 * 3600
-
 
 class S:
     """Merkezî seçiciler (IG değişince burayı güncelle)."""
@@ -42,6 +38,9 @@ class S:
     GIRIS_FORMU = 'input[name="username"]'
     CHECKPOINT_METIN = ["challenge", "checkpoint", "We suspect", "unusual activity",
                         "olağan dışı", "doğrula", "hesabını koru"]
+    # Checkpoint yalnızca URL'den anlaşılır — sayfa metnini taramak ("doğrula",
+    # "challenge" gibi kelimeler normal IG sayfasında da geçer) yanlış pozitif üretir.
+    CHECKPOINT_YOLLARI = ("/challenge", "/checkpoint", "/accounts/suspended")
 
     # Instagram'ın "işlem engellendi" uyarıları (küçük harfle aranır)
     ENGEL_METIN = [
@@ -116,58 +115,17 @@ class AdayHesap:
         }
 
 
-class InstagramClient:
+class InstagramClient(TarayiciIstemci):
+    """Yaşam döngüsü, `_git`, `_insan_yaz`, checkpoint/engel tespiti, takip
+    listesi önbelleği ve `acilis_turu` döngüsü `TarayiciIstemci`'dedir."""
+
     platform = "instagram"
-
-    def __init__(self, ayarlar: Ayarlar):
-        self._ayarlar = ayarlar
-        self._pw = None
-        self._ctx = None
-        self._page = None
-        self._rng = random.Random()
-        # Instagram "işlem engellendi" uyarısı gösterdiyse True olur; üst katman
-        # bunu görüp botu duraklatır ve bayrağı sıfırlar.
-        self.engel_algilandi = False
-        self._takip_onbellek: Optional[tuple[float, list[str]]] = None
-
-    # ------------------------------------------------------------------ #
-    # Yaşam döngüsü
-    # ------------------------------------------------------------------ #
-    def baslat(self):
-        from playwright.sync_api import sync_playwright  # gecikmeli import
-
-        self._pw = sync_playwright().start()
-        self._ctx = self._pw.chromium.launch_persistent_context(
-            user_data_dir=self._ayarlar.tarayici_profil_dizini,
-            headless=self._ayarlar.headless,
-            viewport={"width": 1280, "height": 900},
-            locale="tr-TR",
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
-        return self
-
-    def kapat(self):
-        try:
-            if self._ctx:
-                self._ctx.close()
-        finally:
-            if self._pw:
-                self._pw.stop()
-
-    def __enter__(self):
-        return self.baslat()
-
-    def __exit__(self, *a):
-        self.kapat()
+    LOG_ONEK = "ig"
+    S = S
 
     # ------------------------------------------------------------------ #
     # Durum tespiti
     # ------------------------------------------------------------------ #
-    def _git(self, url: str, bekle: float = 2.5):
-        self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-        time.sleep(bekle + self._rng.uniform(0.5, 2.0))
-
     def giris_yapildi_mi(self) -> bool:
         self._git(IG_TABAN)
         url = (self._page.url or "").lower()
@@ -179,38 +137,6 @@ class InstagramClient:
         # Giriş formu (kullanıcı adı input'u) görünüyorsa henüz giriş yok.
         # Login URL'inde değiliz + kullanıcı adı input'u yok → giriş yapılmış.
         return self._page.query_selector(S.GIRIS_FORMU) is None
-
-    def checkpoint_var_mi(self) -> bool:
-        # Yalnızca URL'e bak — sayfa metnini taramak ("doğrula", "challenge" gibi
-        # kelimeler normal IG sayfasında da geçer) yanlış pozitif üretir.
-        try:
-            url = (self._page.url or "").lower()
-            return any(yol in url for yol in ("/challenge", "/checkpoint", "/accounts/suspended"))
-        except Exception:
-            return False
-
-    def _engel_kontrol(self) -> bool:
-        """Ekranda action-block uyarısı var mı? Varsa `engel_algilandi`'yi kurar."""
-        try:
-            for dialog in self._page.query_selector_all(S.DIALOG):
-                metin = (dialog.inner_text() or "").lower()
-                if any(k in metin for k in S.ENGEL_METIN):
-                    self.engel_algilandi = True
-                    return True
-        except Exception:
-            pass
-        return False
-
-    # ------------------------------------------------------------------ #
-    # İnsan-benzeri yazma
-    # ------------------------------------------------------------------ #
-    def _insan_yaz(self, element, metin: str):
-        p = self._ayarlar.pacing
-        for kar in metin:
-            element.type(kar, delay=self._rng.uniform(
-                p.yazma_min_kar_sn * 1000, p.yazma_max_kar_sn * 1000
-            ))
-        time.sleep(self._rng.uniform(0.4, 1.2))
 
     # ------------------------------------------------------------------ #
     # Keşif
@@ -412,16 +338,6 @@ class InstagramClient:
             pass
         return ""
 
-    def takip_listesi_topla(self) -> list[str]:
-        """Takip listesi; TAKIP_ONBELLEK_SN boyunca önbellekten (boş liste saklanmaz)."""
-        if self._takip_onbellek and time.monotonic() - self._takip_onbellek[0] < TAKIP_ONBELLEK_SN:
-            return list(self._takip_onbellek[1])
-        liste = self._takip_listesini_kazi()
-        print(f"[ig] takip listesi toplandı: {len(liste)} hesap")
-        if liste:
-            self._takip_onbellek = (time.monotonic(), list(liste))
-        return liste
-
     def _takip_listesini_kazi(self, max_hesap: int = 5000) -> list[str]:
         """Kendi "Takip" penceremizi sonuna kadar kaydırıp kullanıcı adlarını toplar.
 
@@ -490,40 +406,8 @@ class InstagramClient:
             S.ONERILEN_BASLIK,
         )
 
-    @staticmethod
-    def _diyalogu_kaydir(dialog) -> None:
-        """Penceredeki kaydırılabilir öğeyi en alta kaydırır (tembel yükleme)."""
-        dialog.evaluate(
-            """d => {
-                const k = [d, ...d.querySelectorAll('*')].find(e =>
-                    e.scrollHeight > e.clientHeight + 10 &&
-                    getComputedStyle(e).overflowY !== 'visible');
-                if (k) k.scrollTop = k.scrollHeight;
-            }"""
-        )
-
-    def acilis_turu(self, karar_fn, sonuc_fn, yazmadan_once) -> None:
-        """Takip listesindeki her hesap için karar → tempo → DM → sonuç bildirimi.
-
-        `karar_fn(Hedef)`: metin → gönder, None → atla, TURU_BITIR → bitir.
-        `yazmadan_once()` profil açılmadan önce çağrılır (tempo beklemesi);
-        False dönerse tur biter.
-        """
-        for handle in self.takip_listesi_topla():
-            if self.checkpoint_var_mi():
-                break
-            hedef = Hedef(handle=handle, profile_url=f"{IG_TABAN}/{handle}/",
-                          kaynak="takip_listesi")
-            metin = karar_fn(hedef)
-            if metin == TURU_BITIR:
-                break
-            if not metin:
-                continue
-            if not yazmadan_once():
-                break
-            sonuc_fn(hedef, metin, self._dm_gonder_sonuc(handle, metin))
-            if self.engel_algilandi:
-                break
+    def _hedef(self, handle: str) -> Hedef:
+        return Hedef(handle=handle, profile_url=f"{IG_TABAN}/{handle}/", kaynak="takip_listesi")
 
     def _dm_gonder_sonuc(self, handle: str, metin: str) -> GonderimSonucu:
         """Profil (yoksa /direct/new/) üzerinden sohbet açıp yazar.
@@ -592,11 +476,7 @@ class InstagramClient:
         return False
 
     def _dm_kapali_uyarisi(self) -> bool:
-        try:
-            metin = (self._page.inner_text("body") or "").lower()
-            return any(k in metin for k in S.DM_KAPALI_METIN)
-        except Exception:
-            return False
+        return self._sayfada_metin_var(S.DM_KAPALI_METIN)
 
     # ------------------------------------------------------------------ #
     # DM okuma / gönderme
