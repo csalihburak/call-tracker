@@ -114,3 +114,38 @@ def test_olay_ekle(baglanti):
     assert eid > 0
     n = baglanti.execute("SELECT COUNT(*) AS n FROM sales_events").fetchone()["n"]
     assert n == 1
+
+
+def test_goc_platform_kolonlari_ve_dnc_tablosu(baglanti):
+    kolonlar = {s["name"] for s in baglanti.execute("PRAGMA table_info(leads)")}
+    assert {"platform", "handle", "profile_url", "discovery_source"} <= kolonlar
+    assert "dnc" in set(db.tablo_adlari(baglanti))
+
+
+def test_goc_mevcut_ig_leadlerini_ve_dnc_yi_doldurur(baglanti):
+    # Eski kod gibi: yalnız ig_handle'lı lead + dnc_handles satırı
+    baglanti.execute(
+        "INSERT INTO leads (business_name, source, ig_handle, ig_profile_url) "
+        "VALUES ('Eski', 'Instagram', 'eski_hesap', 'https://www.instagram.com/eski_hesap/')"
+    )
+    baglanti.execute(
+        "INSERT INTO dnc_handles (handle, reason) VALUES ('kotu_hesap', 'rahatsız etmeyin')"
+    )
+    baglanti.commit()
+
+    db.gocu_uygula(baglanti)
+    db.gocu_uygula(baglanti)  # idempotent
+
+    l = baglanti.execute("SELECT * FROM leads WHERE ig_handle='eski_hesap'").fetchone()
+    assert l["platform"] == "instagram" and l["handle"] == "eski_hesap"
+    assert l["profile_url"] == "https://www.instagram.com/eski_hesap/"
+    d = baglanti.execute("SELECT * FROM dnc WHERE handle='kotu_hesap'").fetchall()
+    assert len(d) == 1 and d[0]["platform"] == "instagram" and d[0]["reason"] == "rahatsız etmeyin"
+
+
+def test_platform_handle_tekil(baglanti):
+    baglanti.execute("INSERT INTO leads (business_name, platform, handle) VALUES ('a','tiktok','x')")
+    with pytest.raises(sqlite3.IntegrityError):
+        baglanti.execute("INSERT INTO leads (business_name, platform, handle) VALUES ('b','tiktok','x')")
+    # Aynı handle başka platformda serbest
+    baglanti.execute("INSERT INTO leads (business_name, platform, handle) VALUES ('c','facebook','x')")

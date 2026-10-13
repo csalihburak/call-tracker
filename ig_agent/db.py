@@ -30,6 +30,13 @@ LEADS_EK_KOLONLAR: list[tuple[str, str]] = [
     # AI'nin ele aldığı son gelen mesaj id'si — aynı mesaja tekrar tekrar
     # karar üretilmesini (sonsuz döngüyü) önler
     ("ai_son_islenen_mesaj_id", "INTEGER"),
+    # Platformlu kimlik (instagram | tiktok | facebook). IG lead'lerinde
+    # ig_handle de dolmaya devam eder (Sheets/panel uyumu).
+    ("platform", "TEXT"),
+    ("handle", "TEXT"),
+    ("profile_url", "TEXT"),
+    # Açılış kaynağı: hikaye | takip_listesi | FB grup id'si
+    ("discovery_source", "TEXT"),
 ]
 
 
@@ -101,6 +108,13 @@ def gocu_uygula(baglanti: sqlite3.Connection) -> None:
                     f"ALTER TABLE leads ADD COLUMN {kolon_adi} {sql_tanimi}"
                 )
 
+        # Mevcut IG lead'lerini platformlu kimliğe geriye dönük doldur
+        baglanti.execute(
+            "UPDATE leads SET platform = 'instagram', handle = ig_handle, "
+            "profile_url = COALESCE(profile_url, ig_profile_url) "
+            "WHERE ig_handle IS NOT NULL AND handle IS NULL"
+        )
+
         # IG DM / hikaye-yanıtı transkripti
         baglanti.execute(
             """
@@ -153,10 +167,32 @@ def gocu_uygula(baglanti: sqlite3.Connection) -> None:
             """
         )
 
+        # Platform bazlı do-not-contact. dnc_handles eski kayıtlar için
+        # kopyalanır; artık okunmaz ama silinmez.
+        baglanti.execute(
+            """
+            CREATE TABLE IF NOT EXISTS dnc (
+                platform   TEXT NOT NULL,
+                handle     TEXT NOT NULL,
+                reason     TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                PRIMARY KEY (platform, handle)
+            )
+            """
+        )
+        baglanti.execute(
+            "INSERT OR IGNORE INTO dnc (platform, handle, reason, created_at) "
+            "SELECT 'instagram', handle, reason, created_at FROM dnc_handles"
+        )
+
         # Keşifte aynı hesabı iki kez lead yapmamak için kısmi tekil indeks
         baglanti.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_ig_handle "
             "ON leads(ig_handle) WHERE ig_handle IS NOT NULL"
+        )
+        baglanti.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_platform_handle "
+            "ON leads(platform, handle) WHERE handle IS NOT NULL"
         )
         baglanti.execute(
             "CREATE INDEX IF NOT EXISTS idx_ig_messages_lead ON ig_messages(lead_id)"
