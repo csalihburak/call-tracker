@@ -1,7 +1,7 @@
 """Panelden değiştirilebilen canlı ayarlar.
 
 `.env` başlangıç değerlerini verir; panelden kaydedilen değerler `bot_state`
-tablosunda `ayar.<ad>` anahtarıyla durur ve bot her turda bunları `.env`'in
+tablosunda `ayar.<ad>` (Instagram) / `tiktok:ayar.<ad>` anahtarıyla durur ve bot her turda bunları `.env`'in
 üstüne bindirir. Böylece ayar değişikliği için botu yeniden başlatmak gerekmez.
 """
 
@@ -12,6 +12,7 @@ import sqlite3
 
 from . import repository as repo
 from .config import Ayarlar
+from .platformlar import anahtar
 
 ONEK = "ayar."
 
@@ -35,14 +36,15 @@ ALANLAR: dict[str, tuple[str | None, type]] = {
 }
 
 
-def oku(conn: sqlite3.Connection) -> dict[str, str]:
-    """DB'de kayıtlı ham ayar değerleri (yalnız tanınan alanlar)."""
+def oku(conn: sqlite3.Connection, platform: str = "instagram") -> dict[str, str]:
+    """Platformun DB'de kayıtlı ham ayar değerleri (yalnız tanınan alanlar)."""
+    onek = anahtar(platform, ONEK)
     satirlar = conn.execute(
-        "SELECT key, value FROM bot_state WHERE key LIKE ?", (ONEK + "%",)
+        "SELECT key, value FROM bot_state WHERE substr(key, 1, ?) = ?", (len(onek), onek)
     ).fetchall()
     sonuc = {}
     for s in satirlar:
-        ad = s["key"][len(ONEK):]
+        ad = s["key"][len(onek):]
         if ad in ALANLAR:
             sonuc[ad] = s["value"]
     return sonuc
@@ -51,7 +53,7 @@ def oku(conn: sqlite3.Connection) -> dict[str, str]:
 def uygula(conn: sqlite3.Connection, temel: Ayarlar) -> Ayarlar:
     """`temel` ayarların kopyasına DB'deki canlı değerleri bindirir."""
     ayarlar = copy.deepcopy(temel)
-    for ad, ham in oku(conn).items():
+    for ad, ham in oku(conn, temel.platform).items():
         hedef, tip = ALANLAR[ad]
         try:
             deger = tip(ham)
@@ -61,10 +63,10 @@ def uygula(conn: sqlite3.Connection, temel: Ayarlar) -> Ayarlar:
     return ayarlar
 
 
-def kaydet(conn: sqlite3.Connection, degerler: dict) -> None:
+def kaydet(conn: sqlite3.Connection, degerler: dict, platform: str = "instagram") -> None:
     """Panelden gelen değerleri kaydeder. Bilinmeyen alan ValueError fırlatır."""
     for ad in degerler:
         if ad not in ALANLAR:
             raise ValueError(f"bilinmeyen ayar: {ad}")
     for ad, deger in degerler.items():
-        repo.durum_ayarla(conn, ONEK + ad, deger)
+        repo.durum_ayarla(conn, ONEK + ad, deger, platform=platform)

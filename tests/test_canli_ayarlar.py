@@ -80,3 +80,41 @@ def test_dm_ayarlari_bindirilir(ortam):
     assert a.pacing.dm_acilis_saatlik == 5 and a.pacing.dm_acilis_gunluk == 20
     assert a.pacing.dm_turu_cooldown_sn == 900
     assert a.kendi_kullanici_adi == "temizify.app"
+
+
+# --------------------------------------------------------------------------- #
+# Platform başına ayarlar (parça B)
+# --------------------------------------------------------------------------- #
+from ig_agent.config import ayarlari_yukle  # noqa: E402
+
+
+@pytest.fixture
+def temiz_env(monkeypatch):
+    for ad in ("TIKTOK_PROFIL_DIZINI", "TIKTOK_KULLANICI_ADI",
+               "TIKTOK_DM_ACILIS_SAATLIK", "TIKTOK_DM_ACILIS_GUNLUK"):
+        monkeypatch.delenv(ad, raising=False)
+
+
+def test_tiktok_varsayilanlari(temiz_env):
+    tt = ayarlari_yukle("tiktok")
+    assert tt.platform == "tiktok"
+    assert (tt.pacing.dm_acilis_saatlik, tt.pacing.dm_acilis_gunluk) == (8, 40)
+    assert tt.tarayici_profil_dizini.endswith(".tiktok_profile")
+    ig = ayarlari_yukle()
+    assert ig.platform == "instagram"
+    assert not ig.tarayici_profil_dizini.endswith(".tiktok_profile")
+    with pytest.raises(ValueError):
+        ayarlari_yukle("myspace")
+
+
+def test_platform_ayarlari_birbirinden_ayri(ortam, temiz_env):
+    conn, temel = ortam
+    canli_ayarlar.kaydet(conn, {"dm_acilis_saatlik": 3}, platform="tiktok")
+    canli_ayarlar.kaydet(conn, {"dm_acilis_saatlik": 12})
+    assert repo.durum_getir(conn, "tiktok:ayar.dm_acilis_saatlik") == "3"
+    assert repo.durum_getir(conn, "ayar.dm_acilis_saatlik") == "12"
+    assert canli_ayarlar.oku(conn) == {"dm_acilis_saatlik": "12"}
+    assert canli_ayarlar.oku(conn, "tiktok") == {"dm_acilis_saatlik": "3"}
+    tt = ayarlari_yukle("tiktok")
+    assert canli_ayarlar.uygula(conn, tt).pacing.dm_acilis_saatlik == 3
+    assert canli_ayarlar.uygula(conn, temel).pacing.dm_acilis_saatlik == 12

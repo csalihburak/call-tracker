@@ -24,6 +24,10 @@ ACILIS_BAGLAMI = {
         "Bir halı yıkama işletmesine Instagram'dan doğrudan mesaj (DM) olarak gidecek; "
         "hikayelerine atıf yapma, bizi tanımıyorlar"
     ),
+    "tiktok_dm": (
+        "Bir halı yıkama işletmesine TikTok'tan doğrudan mesaj olarak gidecek; "
+        "videolarına atıf yapma, bizi tanımıyorlar"
+    ),
 }
 
 

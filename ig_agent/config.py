@@ -57,6 +57,10 @@ def _liste(anahtar: str, varsayilan: list[str]) -> list[str]:
     return [parca.strip() for parca in ham.split(",") if parca.strip()]
 
 
+# Platform başına direkt DM başlangıç kotası (saatlik, günlük) — spec 4.4.
+# Instagram'ınki PacingAyarlari varsayılanlarıdır.
+PLATFORM_DM_KOTA = {"tiktok": (8, 40), "facebook": (8, 30)}
+
 # Keşif için varsayılan hedefler — şimdilik SADECE halı yıkama
 VARSAYILAN_HASHTAGLER = [
     "haliyikama",
@@ -140,6 +144,8 @@ class PacingAyarlari:
 
 @dataclass
 class Ayarlar:
+    # Bu ayarların ait olduğu platform; canlı ayar anahtarlarının önekini belirler
+    platform: str = "instagram"
     veritabani_yolu: str = str(PROJE_KOKU / "sales.db")
     # Playwright kalıcı profil dizini (IG oturumu burada saklanır)
     tarayici_profil_dizini: str = str(PROJE_KOKU / ".ig_profile")
@@ -170,11 +176,11 @@ class Ayarlar:
     pacing: PacingAyarlari = field(default_factory=PacingAyarlari)
 
 
-def ayarlari_yukle() -> Ayarlar:
-    """Ortamdan tam ayar nesnesini üretir."""
+def ayarlari_yukle(platform: str = "instagram") -> Ayarlar:
+    """Ortamdan tam ayar nesnesini üretir (`platform` için uyarlanmış)."""
     _dotenv_yukle()
 
-    return Ayarlar(
+    ayarlar = Ayarlar(
         veritabani_yolu=_str("IG_DB_YOLU", str(PROJE_KOKU / "sales.db")),
         tarayici_profil_dizini=_str(
             "IG_PROFIL_DIZINI", str(PROJE_KOKU / ".ig_profile")
@@ -218,3 +224,22 @@ def ayarlari_yukle() -> Ayarlar:
             aksiyon_bekleme_max=_float("IG_BEKLEME_MAX", 180.0),
         ),
     )
+    if platform != "instagram":
+        _platforma_uyarla(ayarlar, platform)
+    return ayarlar
+
+
+def _platforma_uyarla(ayarlar: Ayarlar, platform: str) -> None:
+    """IG varsayılanlarını başka bir platform için değiştirir: ayrı tarayıcı
+    profili, kendi kullanıcı adı ve direkt DM kotası (`TIKTOK_*` ortam değişkenleri)."""
+    if platform not in PLATFORM_DM_KOTA:
+        raise ValueError(f"bilinmeyen platform: {platform}")
+    on = platform.upper()
+    ayarlar.platform = platform
+    ayarlar.tarayici_profil_dizini = _str(
+        f"{on}_PROFIL_DIZINI", str(PROJE_KOKU / f".{platform}_profile")
+    )
+    ayarlar.kendi_kullanici_adi = _str(f"{on}_KULLANICI_ADI")
+    saatlik, gunluk = PLATFORM_DM_KOTA[platform]
+    ayarlar.pacing.dm_acilis_saatlik = _int(f"{on}_DM_ACILIS_SAATLIK", saatlik)
+    ayarlar.pacing.dm_acilis_gunluk = _int(f"{on}_DM_ACILIS_GUNLUK", gunluk)
