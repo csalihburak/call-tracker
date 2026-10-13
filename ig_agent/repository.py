@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 INSTAGRAM_KAYNAK = "Instagram"
 KAPALI_ASAMALAR = ("musteri", "kayip")
+# platform → leads.source (call-tracker'daki kaynak filtresiyle uyumlu)
+PLATFORM_KAYNAK = {"instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook"}
 
 
 # --------------------------------------------------------------------------- #
@@ -44,8 +46,9 @@ def ig_lead_upsert(
             INSERT INTO leads
                 (business_name, city, notes, stage, source,
                  ig_handle, ig_profile_url, ig_followers,
-                 discovery_hashtag, discovery_city, sheet_dirty)
-            VALUES (?, ?, ?, 'yeni', ?, ?, ?, ?, ?, ?, 1)
+                 discovery_hashtag, discovery_city, sheet_dirty,
+                 platform, handle, profile_url)
+            VALUES (?, ?, ?, 'yeni', ?, ?, ?, ?, ?, ?, 1, 'instagram', ?, ?)
             """,
             (
                 business_name or ig_handle,
@@ -57,9 +60,55 @@ def ig_lead_upsert(
                 ig_followers,
                 discovery_hashtag,
                 discovery_city,
+                ig_handle,
+                ig_profile_url,
             ),
         )
     return int(imlec.lastrowid)
+
+
+def lead_upsert(
+    baglanti: sqlite3.Connection,
+    *,
+    platform: str,
+    handle: str,
+    business_name: str = "",
+    profile_url: str = "",
+    discovery_source: str = "",
+) -> int:
+    """(platform, handle)'a göre lead ekler; varsa mevcut id'yi döner (dedupe)."""
+    mevcut = lead_getir_platform(baglanti, platform, handle)
+    if mevcut:
+        return int(mevcut["id"])
+    ig_handle = handle if platform == "instagram" else None
+    with baglanti:
+        imlec = baglanti.execute(
+            """
+            INSERT INTO leads
+                (business_name, stage, source, platform, handle, profile_url,
+                 discovery_source, ig_handle, ig_profile_url, sheet_dirty)
+            VALUES (?, 'yeni', ?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            (
+                business_name or handle,
+                PLATFORM_KAYNAK[platform],
+                platform,
+                handle,
+                profile_url,
+                discovery_source,
+                ig_handle,
+                profile_url if ig_handle else None,
+            ),
+        )
+    return int(imlec.lastrowid)
+
+
+def lead_getir_platform(
+    baglanti: sqlite3.Connection, platform: str, handle: str
+) -> Optional[sqlite3.Row]:
+    return baglanti.execute(
+        "SELECT * FROM leads WHERE platform = ? AND handle = ?", (platform, handle)
+    ).fetchone()
 
 
 def lead_getir(baglanti: sqlite3.Connection, lead_id: int) -> Optional[sqlite3.Row]:
@@ -114,40 +163,78 @@ def do_not_contact_isaretle(
             (lead_id,),
         )
         satir = baglanti.execute(
-            "SELECT ig_handle FROM leads WHERE id = ?", (lead_id,)
+            "SELECT platform, handle FROM leads WHERE id = ?", (lead_id,)
         ).fetchone()
-        if satir and satir["ig_handle"]:
+        if satir and satir["handle"]:
             baglanti.execute(
-                "INSERT OR IGNORE INTO dnc_handles (handle, reason) VALUES (?, ?)",
-                (satir["ig_handle"], reason),
+                "INSERT OR IGNORE INTO dnc (platform, handle, reason) VALUES (?, ?, ?)",
+                (satir["platform"] or "instagram", satir["handle"], reason),
             )
 
 
-def dnc_handle_mi(baglanti: sqlite3.Connection, ig_handle: str) -> bool:
+def dnc_mi(
+    baglanti: sqlite3.Connection, handle: str, platform: str = "instagram"
+) -> bool:
     satir = baglanti.execute(
-        "SELECT 1 FROM dnc_handles WHERE handle = ?", (ig_handle,)
+        "SELECT 1 FROM dnc WHERE platform = ? AND handle = ?", (platform, handle)
     ).fetchone()
     return satir is not None
 
 
-def yakin_zamanda_iletisim(
-    baglanti: sqlite3.Connection, ig_handle: str, gun: int
-) -> bool:
-    """Son `gun` gün içinde bu hesaba giden (outbound/story_reply) mesaj var mı?
+def dnc_handle_mi(baglanti: sqlite3.Connection, ig_handle: str) -> bool:
+    return dnc_mi(baglanti, ig_handle, "instagram")
 
-    Manuel değil, botun DB'sindeki geçmişe bakar; açılış tekrarını önlemek için.
+
+def dnc_ekle(
+    baglanti: sqlite3.Connection,
+    handle: str,
+    reason: str = "",
+    platform: str = "instagram",
+) -> None:
+    """Hesabı o platformda bir daha yazılmayacaklara ekler (varsa dokunmaz)."""
+    with baglanti:
+        baglanti.execute(
+            "INSERT OR IGNORE INTO dnc (platform, handle, reason) VALUES (?, ?, ?)",
+            (platform, handle, reason),
+        )
+
+
+def dnc_listesi(
+    baglanti: sqlite3.Connection, platform: str = "instagram", limit: int = 100
+) -> list[sqlite3.Row]:
+    return baglanti.execute(
+        "SELECT handle, reason, created_at FROM dnc WHERE platform = ? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (platform, limit),
+    ).fetchall()
+
+
+def yakin_zamanda_iletisim(
+    baglanti: sqlite3.Connection, ig_handle: str, gun: int, platform: str = "instagram"
+) -> bool:
+    """Son `gun` gün içinde bu hesapla herhangi bir mesajlaşma var mı?
+
+    `gun` <= 0 ise süre sınırı yoktur: hesapla HİÇ mesajlaşma olduysa True
+    (bir kez yazılan hesaba bir daha asla açılış yapılmaz). Gelen mesajlar da
+    sayılır — bize yazmış birine soğuk açılış atılmaz. Botun DB'sindeki geçmişe
+    bakar; elle atılan mesajları bilmez. Platform bazındadır: başka platformdaki
+    yazışma sayılmaz.
     """
+    sure_kosulu = ""
+    parametreler: tuple = (platform, ig_handle)
+    if gun > 0:
+        sure_kosulu = "AND julianday('now','localtime') - julianday(m.sent_at) < ?"
+        parametreler = (platform, ig_handle, gun)
     satir = baglanti.execute(
-        """
+        f"""
         SELECT 1
         FROM ig_messages m
         JOIN leads l ON l.id = m.lead_id
-        WHERE l.ig_handle = ?
-          AND m.direction IN ('outbound', 'story_reply')
-          AND julianday('now','localtime') - julianday(m.sent_at) < ?
+        WHERE l.platform = ? AND l.handle = ?
+          {sure_kosulu}
         LIMIT 1
         """,
-        (ig_handle, gun),
+        parametreler,
     ).fetchone()
     return satir is not None
 
@@ -251,6 +338,13 @@ def mesaj_ekle(
                 "sheet_dirty = 1 WHERE id = ?",
                 (lead_id,),
             )
+        elif direction == "dm_opener":
+            baglanti.execute(
+                "UPDATE leads SET last_outbound_at = datetime('now','localtime'), "
+                "stage = CASE WHEN stage = 'yeni' THEN 'ilk_temas' ELSE stage END, "
+                "sheet_dirty = 1 WHERE id = ?",
+                (lead_id,),
+            )
         else:  # outbound
             baglanti.execute(
                 "UPDATE leads SET last_outbound_at = datetime('now','localtime'), "
@@ -316,6 +410,44 @@ def son_acilis_zamani(baglanti: sqlite3.Connection) -> Optional[str]:
     satir = baglanti.execute(
         "SELECT MAX(sent_at) AS t FROM ig_messages WHERE direction = 'story_reply'"
     ).fetchone()
+    return satir["t"] if satir else None
+
+
+def _dm_acilis_sorgu(
+    baglanti: sqlite3.Connection, secim: str, platform: str, kosul: str
+) -> sqlite3.Row:
+    return baglanti.execute(
+        f"SELECT {secim} FROM ig_messages m JOIN leads l ON l.id = m.lead_id "
+        f"WHERE m.direction = 'dm_opener' AND l.platform = ? {kosul}",
+        (platform,),
+    ).fetchone()
+
+
+def son_saat_dm_acilis_sayisi(
+    baglanti: sqlite3.Connection, platform: str = "instagram"
+) -> int:
+    """Son 60 dakikada gönderilen direkt DM açılışı (saatlik tavan için)."""
+    satir = _dm_acilis_sorgu(
+        baglanti, "COUNT(*) AS n", platform,
+        "AND m.sent_at >= datetime('now','localtime','-1 hour')",
+    )
+    return int(satir["n"]) if satir else 0
+
+
+def bugun_dm_acilis_sayisi(
+    baglanti: sqlite3.Connection, platform: str = "instagram"
+) -> int:
+    satir = _dm_acilis_sorgu(
+        baglanti, "COUNT(*) AS n", platform,
+        "AND date(m.sent_at) = date('now','localtime')",
+    )
+    return int(satir["n"]) if satir else 0
+
+
+def son_dm_acilis_zamani(
+    baglanti: sqlite3.Connection, platform: str = "instagram"
+) -> Optional[str]:
+    satir = _dm_acilis_sorgu(baglanti, "MAX(m.sent_at) AS t", platform, "")
     return satir["t"] if satir else None
 
 

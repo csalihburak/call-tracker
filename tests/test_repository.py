@@ -149,3 +149,62 @@ def test_platform_handle_tekil(baglanti):
         baglanti.execute("INSERT INTO leads (business_name, platform, handle) VALUES ('b','tiktok','x')")
     # Aynı handle başka platformda serbest
     baglanti.execute("INSERT INTO leads (business_name, platform, handle) VALUES ('c','facebook','x')")
+
+
+def test_lead_upsert_platform_bazinda(baglanti):
+    a = repo.lead_upsert(baglanti, platform="tiktok", handle="halici", business_name="Halıcı")
+    b = repo.lead_upsert(baglanti, platform="tiktok", handle="halici")
+    c = repo.lead_upsert(baglanti, platform="instagram", handle="halici", discovery_source="takip_listesi")
+    assert a == b and a != c
+    t = repo.lead_getir(baglanti, a)
+    assert t["source"] == "TikTok" and t["ig_handle"] is None and t["stage"] == "yeni"
+    i = repo.lead_getir(baglanti, c)
+    assert i["source"] == "Instagram" and i["ig_handle"] == "halici"
+    assert i["discovery_source"] == "takip_listesi"
+    assert repo.lead_getir_platform(baglanti, "instagram", "halici")["id"] == c
+
+
+def test_ig_lead_upsert_platform_alanlarini_doldurur(baglanti):
+    lid = repo.ig_lead_upsert(baglanti, ig_handle="yeni_ig", business_name="Y")
+    l = repo.lead_getir(baglanti, lid)
+    assert l["platform"] == "instagram" and l["handle"] == "yeni_ig"
+    # lead_upsert aynı lead'i bulur
+    assert repo.lead_upsert(baglanti, platform="instagram", handle="yeni_ig") == lid
+
+
+def test_yakin_zamanda_iletisim_platform_ayrimi(baglanti):
+    lid = repo.lead_upsert(baglanti, platform="instagram", handle="ortak")
+    repo.mesaj_ekle(baglanti, lid, "story_reply", "selam")
+    assert repo.yakin_zamanda_iletisim(baglanti, "ortak", 0) is True
+    assert repo.yakin_zamanda_iletisim(baglanti, "ortak", 0, platform="tiktok") is False
+
+
+def test_dnc_platform_bazinda(baglanti):
+    repo.dnc_ekle(baglanti, "kapali_hesap", "dm_kapali", platform="tiktok")
+    repo.dnc_ekle(baglanti, "kapali_hesap", "tekrar", platform="tiktok")  # INSERT OR IGNORE
+    assert repo.dnc_mi(baglanti, "kapali_hesap", platform="tiktok")
+    assert not repo.dnc_mi(baglanti, "kapali_hesap")  # instagram'da değil
+    satirlar = repo.dnc_listesi(baglanti, platform="tiktok")
+    assert len(satirlar) == 1 and satirlar[0]["reason"] == "dm_kapali"
+
+
+def test_do_not_contact_isaretle_dnc_tablosuna_yazar(baglanti):
+    lid = repo.ig_lead_upsert(baglanti, ig_handle="red_eden", business_name="R")
+    repo.do_not_contact_isaretle(baglanti, lid, reason="istemiyor")
+    assert repo.dnc_mi(baglanti, "red_eden") and repo.dnc_handle_mi(baglanti, "red_eden")
+
+
+def test_dm_opener_mesaji_ve_sayaclar(baglanti):
+    lid = repo.lead_upsert(baglanti, platform="instagram", handle="dmli")
+    hid = repo.lead_upsert(baglanti, platform="instagram", handle="hikayeli")
+    repo.mesaj_ekle(baglanti, lid, "dm_opener", "Merhaba")
+    repo.mesaj_ekle(baglanti, hid, "story_reply", "Kolay gelsin")
+    l = repo.lead_getir(baglanti, lid)
+    assert l["stage"] == "ilk_temas" and l["last_outbound_at"] is not None
+    assert l["last_story_reply_at"] is None
+    assert repo.son_saat_dm_acilis_sayisi(baglanti) == 1
+    assert repo.bugun_dm_acilis_sayisi(baglanti) == 1
+    assert repo.son_dm_acilis_zamani(baglanti) is not None
+    assert repo.son_saat_dm_acilis_sayisi(baglanti, platform="tiktok") == 0
+    # hikaye sayaçları DM'i saymaz
+    assert repo.son_saat_acilis_sayisi(baglanti) == 1
