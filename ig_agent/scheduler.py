@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, Optional, Protocol
 
 from . import brain, pacing, repository as repo
@@ -61,6 +61,12 @@ HIKAYE_TURU_COOLDOWN_SN = 600
 
 # Tavan 0 (sınırsız) iken "kalan" için kullanılan büyük sayı
 SINIRSIZ = 10**6
+
+# Direkt DM turu tek seferde en fazla bu kadar sürer; sonra ara verilir ki
+# yanıt / hikaye turu araya girebilsin (ara verilen tur soğuma beklemez)
+DM_TURU_ZAMAN_KUTUSU_SN = 15 * 60
+# Art arda bu kadar gönderim BASARISIZ olursa tur biter (seçici kırılması)
+DM_ARDISIK_BASARISIZ_TAVAN = 5
 
 
 def acilis_kalan(conn: sqlite3.Connection, ayarlar: Ayarlar) -> int:
@@ -268,17 +274,26 @@ def direkt_dm_turu_yap(
         return 0
 
     gun = getattr(ayarlar, "yeniden_iletisim_gun", 0)
-    ist = {"gorulen": 0, "secildi": 0, "gonderildi": 0, "kapali": 0,
+    ist = {"gorulen": 0, "secildi": 0, "gonderildi": 0, "kapali": 0, "onceki": 0,
            "basarisiz": 0, "atlandi_yakin": 0, "atlandi_dnc": 0}
+    # son_deneme: başarısız denemeler de tempoya girsin; ara: zaman kutusu doldu
+    durum = {"son_deneme": None, "ardisik_basarisiz": 0, "ara": False}
+    baslangic = simdi_fn()
 
     def karar_fn(hedef: Hedef):
         ist["gorulen"] += 1
         repo.nabiz_at(conn, f"DM turu · @{hedef.handle} · gönderilen {ist['gonderildi']}")
         if repo.bayrak_getir(conn, "master_paused", False):
             return TURU_BITIR
-        if not pacing.calisma_saatinde_mi(simdi_fn(), p.calisma_baslangic_saat, p.calisma_bitis_saat):
+        an = simdi_fn()
+        if not pacing.calisma_saatinde_mi(an, p.calisma_baslangic_saat, p.calisma_bitis_saat):
             return TURU_BITIR
         if dm_acilis_kalan(conn, ayarlar) <= 0:
+            return TURU_BITIR
+        if durum["ardisik_basarisiz"] >= DM_ARDISIK_BASARISIZ_TAVAN:
+            return TURU_BITIR
+        if (an - baslangic).total_seconds() >= DM_TURU_ZAMAN_KUTUSU_SN:
+            durum["ara"] = True
             return TURU_BITIR
         h = (hedef.handle or "").strip().lstrip("@")
         if not h:
@@ -294,20 +309,27 @@ def direkt_dm_turu_yap(
         return _acilis_metni(beyin_istemci, ayarlar, lead, rng, baglam="dm")
 
     def yazmadan_once() -> bool:
-        """Bir önceki DM'den bu yana hedef aralık dolmadıysa bekle."""
+        """Bir önceki DM'den (ya da başarısız denemeden) bu yana hedef aralık dolmadıysa bekle."""
         bekle = dm_acilis_araligi_sn(ayarlar, rng)
+        referans = durum["son_deneme"]
         son = repo.son_dm_acilis_zamani(conn, platform)
         if son:
             try:
-                bekle -= (datetime.now() - datetime.fromisoformat(son)).total_seconds()
+                basarili = datetime.fromisoformat(son)
+                referans = max(referans, basarili) if referans else basarili
             except ValueError:
                 pass
+        if referans:
+            bekle -= (datetime.now() - referans).total_seconds()
         if bekle > 0:
             repo.nabiz_at(conn, f"DM turu · tempo beklemesi {int(bekle)} sn")
         return uyku_fn(max(0.0, bekle))
 
     def sonuc_fn(hedef: Hedef, metin: str, sonuc: GonderimSonucu) -> None:
         h = (hedef.handle or "").strip().lstrip("@")
+        durum["son_deneme"] = datetime.now()
+        durum["ardisik_basarisiz"] = durum["ardisik_basarisiz"] + 1 \
+            if sonuc == GonderimSonucu.BASARISIZ else 0
         if sonuc == GonderimSonucu.GONDERILDI:
             lead_id = repo.lead_upsert(
                 conn, platform=platform, handle=h, business_name=hedef.ad or h,
@@ -318,15 +340,26 @@ def direkt_dm_turu_yap(
         elif sonuc == GonderimSonucu.DM_KAPALI:
             repo.dnc_ekle(conn, h, "dm_kapali", platform=platform)
             ist["kapali"] += 1
+        elif sonuc == GonderimSonucu.ONCEKI_SOHBET:
+            repo.dnc_ekle(conn, h, "onceki_sohbet", platform=platform)
+            ist["onceki"] += 1
         else:
             ist["basarisiz"] += 1
 
-    istemci.acilis_turu(karar_fn, sonuc_fn, yazmadan_once)
+    try:
+        istemci.acilis_turu(karar_fn, sonuc_fn, yazmadan_once)
+    finally:
+        # Hata olsa da damgala (sıcak döngü olmasın). Zaman kutusu yüzünden ara
+        # verildiyse soğuma beklemeden devam edilebilsin.
+        damga = datetime.now()
+        if durum["ara"]:
+            damga -= timedelta(seconds=p.dm_turu_cooldown_sn)
+        repo.durum_ayarla(conn, "son_dm_turu", damga.isoformat())
 
-    repo.durum_ayarla(conn, "son_dm_turu", datetime.now().isoformat())
     print(
-        f"[dm] direkt DM turu: gezilen={ist['gorulen']} seçildi={ist['secildi']} "
-        f"gönderildi={ist['gonderildi']} dm_kapalı={ist['kapali']} "
+        f"[dm] direkt DM turu{' (ara verildi)' if durum['ara'] else ''}: "
+        f"gezilen={ist['gorulen']} seçildi={ist['secildi']} "
+        f"gönderildi={ist['gonderildi']} dm_kapalı={ist['kapali']} önceki_sohbet={ist['onceki']} "
         f"başarısız={ist['basarisiz']} "
         f"atlandı(önceden yazılmış)={ist['atlandi_yakin']} atlandı(dnc)={ist['atlandi_dnc']} "
         f"son 1 saat={repo.son_saat_dm_acilis_sayisi(conn, platform)}"
@@ -336,6 +369,9 @@ def direkt_dm_turu_yap(
     elif ist["gonderildi"] == 0 and (ist["basarisiz"] + ist["kapali"]) >= 3 \
             and not getattr(istemci, "engel_algilandi", False):
         print("[dm] ⚠️ hiç DM gönderilemedi — S.MESAJ_KUTUSU / yeni mesaj seçicileri ayarlanmalı olabilir")
+    if ist["onceki"] >= 5 and ist["gonderildi"] == 0:
+        print("[dm] ⚠️ her sohbet 'önceki yazışma var' göründü — S.MESAJ_SATIRI yanlış pozitif olabilir; "
+              "düzeltip DELETE FROM dnc WHERE reason='onceki_sohbet' ile geri alın")
     return ist["gonderildi"]
 
 

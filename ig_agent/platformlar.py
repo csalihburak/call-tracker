@@ -21,6 +21,8 @@ class GonderimSonucu(str, Enum):
     BASARISIZ = "basarisiz"
     # Platform açıkça "bu hesaba mesaj gönderilemez" dedi — bir daha denenmez
     DM_KAPALI = "dm_kapali"
+    # Sohbette zaten yazışma var (elle/telefondan) — soğuk açılış atılmaz
+    ONCEKI_SOHBET = "onceki_sohbet"
 
 
 @dataclass(frozen=True)

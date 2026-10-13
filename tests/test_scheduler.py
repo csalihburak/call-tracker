@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 
 import pytest
@@ -512,3 +513,60 @@ def test_dm_kotasi_bayrak_kapaliyken_sifir(ortam):
     repo.durum_ayarla(conn, "dm_acilis_aktif", "1")
     k = {x.tur: x for x in sch.kota_durumlari(conn, ayarlar)}
     assert k[sch.DIRECT_DM].musait
+
+
+# --- final inceleme düzeltmeleri ------------------------------------------- #
+def test_basarisiz_denemeler_de_tempolanir_ve_art_arda_5te_durur(ortam):
+    conn, ayarlar, lead = ortam
+    ayarlar.pacing.dm_acilis_saatlik = 10
+    # 2 saat önceki başarılı DM: tempo artık ona göre sıfır olmamalı
+    eski = repo.lead_upsert(conn, platform="instagram", handle="eski")
+    repo.mesaj_ekle(conn, eski, "dm_opener", "eski")
+    conn.execute("UPDATE ig_messages SET sent_at = datetime('now','localtime','-2 hours')")
+    conn.commit()
+    hedefler = [f"k{i}" for i in range(20)]
+    ist = SahteDMIstemci(hedefler, sonuclar={h: GonderimSonucu.BASARISIZ for h in hedefler})
+    denemeler = []
+    orijinal = ist.acilis_turu
+
+    def say(karar_fn, sonuc_fn, yazmadan_once):
+        def sonuc_say(h, m, s):
+            denemeler.append(h.handle)
+            sonuc_fn(h, m, s)
+        orijinal(karar_fn, sonuc_say, yazmadan_once)
+
+    ist.acilis_turu = say
+    beklemeler = []
+    _dm_turu(conn, ayarlar, ist, uyku_fn=lambda sn: beklemeler.append(sn) or True)
+    assert len(denemeler) == 5  # art arda 5 BASARISIZ → tur biter
+    assert all(b > 0 for b in beklemeler[1:])  # başarısızlar arasında da tempo var
+
+
+def test_dm_turu_zaman_kutusunda_ara_verir_ve_hemen_devam_edilebilir(ortam):
+    conn, ayarlar, lead = ortam
+    saatler = iter([datetime(2026, 9, 24, 12, 0) + __import__("datetime").timedelta(minutes=6 * i)
+                    for i in range(50)])
+    ist = SahteDMIstemci(["a", "b", "c", "d"])
+    assert _dm_turu(conn, ayarlar, ist, simdi_fn=lambda: next(saatler)) == 2
+    # Ara verildi (bitmedi) → DM turu soğumasız tekrar başlayabilir
+    assert sch._tur_zamani(conn, "son_dm_turu", ayarlar.pacing.dm_turu_cooldown_sn)
+
+
+def test_dm_turu_hata_verse_de_soguma_damgalanir(ortam, monkeypatch):
+    conn, ayarlar, lead = ortam
+
+    def patla(*a, **k):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(repo, "lead_upsert", patla)
+    with pytest.raises(sqlite3.OperationalError):
+        _dm_turu(conn, ayarlar, SahteDMIstemci(["a"]))
+    assert not sch._tur_zamani(conn, "son_dm_turu", 3600)
+
+
+def test_onceki_sohbet_dnc_ye_eklenir_gonderilmis_sayilmaz(ortam):
+    conn, ayarlar, lead = ortam
+    ist = SahteDMIstemci(["musteri", "yeni"], sonuclar={"musteri": GonderimSonucu.ONCEKI_SOHBET})
+    assert _dm_turu(conn, ayarlar, ist) == 1
+    assert repo.dnc_mi(conn, "musteri")
+    assert {d["handle"]: d["reason"] for d in repo.dnc_listesi(conn)}["musteri"] == "onceki_sohbet"
