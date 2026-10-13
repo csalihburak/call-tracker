@@ -322,7 +322,8 @@ def direkt_dm_turu_yap(
             return None
         lead = repo.lead_getir_platform(conn, platform, h)
         ist["secildi"] += 1
-        return _acilis_metni(beyin_istemci, ayarlar, lead, rng, baglam=baglam)
+        return _acilis_metni(beyin_istemci, ayarlar, lead, rng, baglam=baglam,
+                             hedef_adi=f"{hedef.ad} {h}", an=an)
 
     def yazmadan_once() -> bool:
         """Bir önceki DM'den (ya da başarısız denemeden) bu yana hedef aralık dolmadıysa bekle."""
@@ -608,18 +609,60 @@ def tek_tur(
     return gorev
 
 
-def _acilis_metni(
-    beyin_istemci, ayarlar, lead, rng: Optional[random.Random] = None, baglam: str = "hikaye"
-) -> str:
-    """Açılış metni (`baglam`: "hikaye" = hikaye yanıtı, "dm" = direkt DM).
+# Sabit açılış metinlerini hedefe uydurma: bu kelimeleri içeren metin yalnızca adı /
+# kullanıcı adı sektör kelimesi içeren işletmeye gider (ör. "Halı teslim…" → halıcıya)
+SEKTOR_METIN_KELIMELERI = ("halı", "koltuk")
+SEKTOR_HEDEF_KELIMELERI = ("hali", "halı", "koltuk", "yikama", "yıkama", "temizlik", "carpet")
+# Selamlaşma → geçerli olduğu saat aralığı [başlangıç, bitiş)
+SELAM_SAATLERI = {"günaydın": (0, 12), "iyi akşamlar": (17, 24), "iyi geceler": (21, 24)}
 
-    "sabit" modda panelde girilen satırlardan rastgele biri; aksi halde beyin
-    varsa GPT ile çeşitlendirilmiş metin, yoksa güvenli sabit.
+
+def _tr_kucuk(metin: str) -> str:
+    """Türkçe küçük harf (İ→i, I→ı); str.lower 'İ'yi 'i̇' yapar."""
+    return (metin or "").replace("İ", "i").replace("I", "ı").lower()
+
+
+def uygun_acilis_metinleri(satirlar: list[str], hedef_adi: str, an: datetime) -> list[str]:
+    """Hedefe ve saate uymayan sabit metinleri eler (GPT yokken "uygun olanı" seçmek için)."""
+    hedef = _tr_kucuk(hedef_adi)
+    sektorde = any(k in hedef for k in SEKTOR_HEDEF_KELIMELERI)
+    uygun = []
+    for satir in satirlar:
+        kucuk = _tr_kucuk(satir)
+        if not sektorde and any(k in kucuk for k in SEKTOR_METIN_KELIMELERI):
+            continue
+        if any(selam in kucuk and not (bas <= an.hour < bit)
+               for selam, (bas, bit) in SELAM_SAATLERI.items()):
+            continue
+        uygun.append(satir)
+    return uygun
+
+
+def _acilis_metni(
+    beyin_istemci,
+    ayarlar,
+    lead,
+    rng: Optional[random.Random] = None,
+    baglam: str = "hikaye",
+    hedef_adi: str = "",
+    an: Optional[datetime] = None,
+) -> str:
+    """Açılış metni (`baglam`: "hikaye" = hikaye yanıtı, "dm" / "tiktok_dm" = direkt DM).
+
+    "sabit" modda panelde girilen satırlardan hedefe ve saate UYGUN olanlardan
+    rastgele biri (bkz. `uygun_acilis_metinleri`); uygun satır yoksa ya da mod
+    "gpt" ise beyin varsa GPT ile çeşitlendirilmiş metin, yoksa güvenli sabit.
     """
     if getattr(ayarlar, "acilis_modu", "gpt") == "sabit":
         satirlar = [x.strip() for x in (ayarlar.acilis_metinleri or "").splitlines() if x.strip()]
-        if satirlar:
-            return (rng or random).choice(satirlar)
+        if not hedef_adi and lead is not None:
+            try:
+                hedef_adi = f"{lead['business_name'] or ''} {lead['ig_handle'] or ''}"
+            except (KeyError, IndexError, TypeError):
+                pass
+        uygun = uygun_acilis_metinleri(satirlar, hedef_adi, an or datetime.now())
+        if uygun:
+            return (rng or random).choice(uygun)
     try:
         if hasattr(beyin_istemci, "acilis_uret"):
             return beyin_istemci.acilis_uret(ayarlar, lead, baglam=baglam)

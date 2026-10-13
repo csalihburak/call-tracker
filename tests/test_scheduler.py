@@ -647,6 +647,9 @@ class _Oglen(datetime):
 def test_tek_tur_tiktok_yalniz_dm_yapar(ortam, monkeypatch):
     conn, ayarlar, _ = ortam  # fixture'da IG'de yanıt bekleyen gelen mesaj var
     monkeypatch.setattr(sch, "datetime", _Oglen)
+    # Tur içindeki saat kontrolü gerçek saati kullanır (simdi_fn varsayılanı) — testi
+    # saatten bağımsız yapmak için çalışma saatini tüm güne aç
+    ayarlar.pacing.calisma_baslangic_saat, ayarlar.pacing.calisma_bitis_saat = 0, 24
     monkeypatch.setattr(sch, "uyku", lambda *a, **k: True)
     repo.durum_ayarla(conn, "master_paused", "0", platform="tiktok")
     repo.durum_ayarla(conn, "dm_acilis_aktif", "1", platform="tiktok")
@@ -668,3 +671,60 @@ def test_engel_tiktok_yalniz_kendini_duraklatir(ortam):
     assert repo.bayrak_getir(conn, "master_paused", platform="tiktok")
     assert not repo.bayrak_getir(conn, "action_block")
     assert "TikTok" in repo.durum_getir(conn, "son_hata", platform="tiktok")
+
+
+# --------------------------------------------------------------------------- #
+# Sabit açılış metinlerinin hedefe / saate göre seçimi (GPT yokken)
+# --------------------------------------------------------------------------- #
+M_GENEL = "Merhabalar, kolay gelsin! İşlerinizi takip etmek için herhangi bir program kullanıyor musunuz?"
+M_SIPARIS = "Selamlar, hayırlı işler! Siparişlerinizi ve müşteri takibini nasıl yapıyorsunuz, bir program var mı?"
+M_HALI = "Merhaba, kolay gelsin! Halı teslim ve müşteri takibini defterden mi yoksa bir uygulamadan mı yapıyorsunuz?"
+M_AKSAM = "İyi akşamlar, kolay gelsin! İşletmenizde sipariş takibi için bir program kullanıyor musunuz?"
+AKSAM = datetime(2026, 10, 13, 21, 0)
+SABAH = datetime(2026, 10, 14, 11, 0)
+
+
+def _sabit(ayarlar, *satirlar):
+    ayarlar.acilis_modu = "sabit"
+    ayarlar.acilis_metinleri = "\n".join(satirlar)
+
+
+def _secimler(ayarlar, hedef_adi, an, n=80):
+    rng = random.Random(1)
+    return {sch._acilis_metni(object(), ayarlar, None, rng, baglam="tiktok_dm",
+                              hedef_adi=hedef_adi, an=an) for _ in range(n)}
+
+
+def test_hali_metni_yalniz_halicilara(ortam):
+    _, ayarlar, _ = ortam
+    _sabit(ayarlar, M_GENEL, M_SIPARIS, M_HALI, M_AKSAM)
+    assert _secimler(ayarlar, "emretel46 Emre Tel", AKSAM) == {M_GENEL, M_SIPARIS, M_AKSAM}
+    assert _secimler(ayarlar, "damla_haliyikama.63 DAMLA HALİ&KOLTUK YIKAMA", AKSAM) == \
+        {M_GENEL, M_SIPARIS, M_HALI, M_AKSAM}
+
+
+def test_iyi_aksamlar_yalniz_aksam(ortam):
+    _, ayarlar, _ = ortam
+    _sabit(ayarlar, M_GENEL, M_SIPARIS, M_HALI, M_AKSAM)
+    assert _secimler(ayarlar, "yildizhaliyikama", SABAH) == {M_GENEL, M_SIPARIS, M_HALI}
+
+
+def test_uygun_metin_yoksa_genel_metne_duser(ortam):
+    _, ayarlar, _ = ortam
+    _sabit(ayarlar, M_HALI, M_AKSAM)
+    secim = _secimler(ayarlar, "emretel46 Emre Tel", SABAH)
+    assert len(secim) == 1 and not (secim & {M_HALI, M_AKSAM})
+
+
+def test_dm_turu_hedef_adini_metin_secimine_verir(ortam):
+    conn, ayarlar, _ = ortam
+    _sabit(ayarlar, M_HALI)
+    ist = SahteTikTok([])
+    ist.hedefler = [Hedef(handle="damla_x", ad="DAMLA HALİ&KOLTUK YIKAMA", kaynak="takip_listesi"),
+                    Hedef(handle="emre_x", ad="Emre Tel", kaynak="takip_listesi")]
+    _dm_turu(conn, ayarlar, ist)
+    metinler = dict(conn.execute(
+        "SELECT l.handle, m.body FROM ig_messages m JOIN leads l ON l.id = m.lead_id "
+        "WHERE l.platform = 'tiktok'").fetchall())
+    assert metinler["damla_x"] == M_HALI
+    assert metinler["emre_x"] != M_HALI

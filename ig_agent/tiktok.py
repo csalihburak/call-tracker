@@ -101,6 +101,9 @@ class TikTokClient(TarayiciIstemci):
         super().__init__(ayarlar)
         # Açık sohbetin çerçevesi (Business Suite'te iframe); yoksa None
         self._sohbet = None
+        # Takip penceresinde görülen görünen adlar (kullanıcı adı → ad); açılış
+        # metnini işletmeye göre seçmek için Hedef.ad'a taşınır
+        self._adlar: dict[str, str] = {}
         # Profilinde "Mesaj" düğmesi görünmeyen hesaplar bu süreç boyunca atlanır
         # (tur her seferinde aynı hesaplarda tıkanmasın). DNC'ye yazılmaz: seçici
         # kırılması kalıcı iz bırakmasın; süreç yeniden başlayınca tekrar denenir.
@@ -188,6 +191,7 @@ class TikTokClient(TarayiciIstemci):
                 pencere = self._page.query_selector(S.TAKIP_PENCERESI)
                 if pencere is None:
                     break
+                self._adlar.update(self._pencere_adlari(pencere))
                 yeni = 0
                 for h in self._pencere_kullanicilari(pencere):
                     if h.lower() == kendi.lower() or h in gorulen:
@@ -229,6 +233,25 @@ class TikTokClient(TarayiciIstemci):
         )
 
     @staticmethod
+    def _pencere_adlari(pencere) -> dict[str, str]:
+        """Penceredeki hesapların görünen adları: bağlantı metninde kullanıcı
+        adından önceki satır (ör. "DAMLA HALİ&KOLTUK YIKAMA"). Adı olmayan atlanır."""
+        bilgiler = pencere.evaluate(
+            "p => [...p.querySelectorAll('a[href]')].map(a => [a.getAttribute('href'), a.innerText || ''])"
+        )
+        adlar: dict[str, str] = {}
+        for href, metin in bilgiler:
+            eslesme = _KULLANICI_YOLU.match((href or "").removeprefix(TIKTOK_TABAN))
+            if not eslesme or eslesme.group(1) in adlar:
+                continue
+            h = eslesme.group(1)
+            satirlar = [s.strip() for s in metin.splitlines() if s.strip()]
+            ad = next((s for s in satirlar if s.lower() != h.lower()), "")
+            if ad:
+                adlar[h] = ad
+        return adlar
+
+    @staticmethod
     def _pencere_kullanicilari(pencere) -> list[str]:
         """Penceredeki profil bağlantılarının kullanıcı adları (DOM sırasıyla)."""
         hrefler = pencere.evaluate(
@@ -252,7 +275,8 @@ class TikTokClient(TarayiciIstemci):
         return True
 
     def _hedef(self, handle: str) -> Hedef:
-        return Hedef(handle=handle, profile_url=f"{TIKTOK_TABAN}/@{handle}", kaynak="takip_listesi")
+        return Hedef(handle=handle, ad=self._adlar.get(handle, ""),
+                     profile_url=f"{TIKTOK_TABAN}/@{handle}", kaynak="takip_listesi")
 
     # ------------------------------------------------------------------ #
     # DM

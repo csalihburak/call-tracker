@@ -349,3 +349,20 @@ def test_takip_penceresi_kaydirinca_yeni_hesaplar_yuklenir(sayfa):
         TikTokClient._pencereyi_kaydir(pencere)
         sayfa.wait_for_timeout(300)
     assert len(set(TikTokClient._pencere_kullanicilari(pencere))) == 30
+
+
+def test_takip_penceresi_gorunen_adlar(sayfa):
+    sayfa.set_content("""<div data-e2e="follow-info-popup">
+        <li><a href="/@damla_haliyikama.63"><img></a>
+            <a href="/@damla_haliyikama.63"><p>DAMLA HALİ&amp;KOLTUK YIKAMA</p><p>damla_haliyikama.63</p></a></li>
+        <li><a href="/@emretel46"><span>Emre Tel</span><br><span>emretel46</span></a></li>
+        <li><a href="/@adsiz"><span>adsiz</span></a></li></div>""")
+    pencere = sayfa.query_selector(S.TAKIP_PENCERESI)
+    assert TikTokClient._pencere_adlari(pencere) == {
+        "damla_haliyikama.63": "DAMLA HALİ&KOLTUK YIKAMA", "emretel46": "Emre Tel"}
+
+
+def test_hedef_gorunen_adi_tasir(tt):
+    tt._adlar = {"a_hali": "A Halı Yıkama"}
+    assert tt._hedef("a_hali").ad == "A Halı Yıkama"
+    assert tt._hedef("b").ad == ""
