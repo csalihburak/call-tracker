@@ -26,13 +26,15 @@ keşif → açılış(hikaye-yanıtı) → inbox okuma → GPT yanıtı ──�
 | `pacing.py` | Saf anti-ban: warmup, çalışma saati, kota |
 | `brain.py` | GPT satış beyni (playbook + araçlar + karar) |
 | `llm_openai.py` | OpenAI tabanlı LLM istemcisi |
-| `platformlar.py` | Platform istemcilerinin ortak tipleri (Hedef, GonderimSonucu) |
-| `instagram.py` | Playwright web otomasyonu (seçiciler `S` sınıfında) |
+| `platformlar.py` | Ortak tipler (Hedef, GonderimSonucu), `anahtar()` (bot_state önekleri), `istemci_olustur()` |
+| `tarayici.py` | Ortak Playwright temeli (kalıcı profil, yazma, checkpoint/engel, açılış turu döngüsü) |
+| `instagram.py` | Instagram otomasyonu (seçiciler `S` sınıfında) |
+| `tiktok.py` | TikTok otomasyonu — takip edilenlere DM (seçiciler `S` sınıfında) |
 | `inbox_ingest.py` | Gelen DM'leri DB'ye alma (dedupe) |
 | `scheduler.py` | Görev seçimi + karar uygulama + ana döngü |
 | `alerts.py` | Backend `/internal/sales-alerts` bildirimi |
 | `sheets.py` | Google Sheets aynası (tek yönlü senkron) |
-| `run.py` | Giriş noktası (her şeyi bağlar) |
+| `run.py` | Giriş noktası (`--platform instagram\|tiktok`; her platform ayrı süreç) |
 | `control_panel.py` | Streamlit kontrol paneli |
 
 ## Kurulum
@@ -67,7 +69,7 @@ Panel:
 
 > `.venv/bin/python` Python 3.14'ü gösteriyor ama paketler 3.12'ye kurulu; bu
 > yüzden her yerde `.venv/bin/python3.12` kullanılır (`baslat.sh` bunu yapar).
-> Bot elle: `.venv/bin/python3.12 -m ig_agent.run`
+> Bot elle: `.venv/bin/python3.12 -m ig_agent.run` (TikTok: `... -m ig_agent.run --platform tiktok`)
 
 ## Hikaye turu nasıl çalışır
 
@@ -98,6 +100,33 @@ hesap do-not-contact'a `onceki_sohbet` nedeniyle eklenir. Takip penceresinin
 altındaki "Önerilenler" hesapları listeye alınmaz. Tur en fazla 15 dk sürer, sonra
 yanıt/hikaye turu araya girebilsin diye ara verir; art arda 5 gönderim başarısız
 olursa tur durur (seçiciler kırılmış olabilir). Takip listesi 3 saat önbellekte tutulur.
+
+## TikTok — takip edilenlere DM
+
+Panelin üstündeki **Platform** seçicisinden **TikTok** seçilir; TikTok botu
+Instagram'dan **ayrı bir süreçtir** (`run.py --platform tiktok`), ayrı başlatılır,
+duraklatılır ve kapatılır. Başlığın altındaki satır tüm platformların durumunu
+(çalışıyor / duraklatılmış / kapalı + bugünkü açılış sayısı) gösterir.
+
+- İlk başlatmada ayrı bir tarayıcı açılır; TikTok'a **siz** giriş yaparsınız.
+  Oturum `.tiktok_profile/`'da saklanır. Çıktı `tiktok_agent.log`'a yazılır.
+- Yalnızca açılış yapar: "Takip edilen" listemizi toplar, daha önce **TikTok'ta**
+  hiç yazışılmamış ve TikTok do-not-contact'ında olmayan her hesaba profildeki
+  **Mesaj** düğmesiyle ilk mesajı yazar. Instagram'da yazışılmış bir işletmeye
+  TikTok'tan ayrıca yazılabilir. Gelen mesajlar TikTok uygulamasından elle yanıtlanır.
+- Kota Instagram'dan bağımsız: varsayılan **8/saat, 40/gün**; panelden değişir.
+  Direkt DM varsayılan **kapalı**: Ayarlar → "TikTok'ta takip edilenlere direkt DM'i aç".
+- TikTok "mesaj gönderemezsiniz" derse hesap TikTok do-not-contact'ına `dm_kapali`
+  ile eklenir. Profilinde Mesaj düğmesi görünmeyen hesaplar o süreç boyunca
+  atlanır (do-not-contact'a yazılmaz; bot yeniden başlayınca tekrar denenir).
+- Kaydırmalı bulmaca / doğrulama (CAPTCHA) görülürse **çözülmez**: yalnızca TikTok
+  botu duraklar, panelde uyarı çıkar. Tarayıcıdan çözüp *Uyarıyı temizle* → *Başlat*.
+- Ayarlar `bot_state`'te `tiktok:` önekiyle durur (`tiktok:master_paused`,
+  `tiktok:ayar.dm_acilis_saatlik` …); Instagram anahtarları öneksizdir.
+- `.env`: `TIKTOK_KULLANICI_ADI`, `TIKTOK_PROFIL_DIZINI`, `TIKTOK_DM_ACILIS_SAATLIK`,
+  `TIKTOK_DM_ACILIS_GUNLUK` (hepsi isteğe bağlı).
+- Seçiciler `tiktok.py` → `S`'de; ilk canlı kontrol listesi:
+  `docs/superpowers/plans/2026-10-13-b-tiktok-canli-kontrol.md`.
 
 ## Güvenlik / anti-ban notları
 
