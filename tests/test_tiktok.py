@@ -6,7 +6,7 @@ import pytest
 
 from ig_agent.config import ayarlari_yukle
 from ig_agent.platformlar import GonderimSonucu
-from ig_agent.tiktok import TikTokClient
+from ig_agent.tiktok import S, TikTokClient
 
 
 @pytest.fixture
@@ -53,6 +53,7 @@ def test_kutu_acilmadiysa_basarisiz(tt, monkeypatch):
 
 def test_onceki_sohbet(tt, monkeypatch):
     monkeypatch.setattr(tt, "_profilden_mesaj_ac", lambda h: True)
+    monkeypatch.setattr(tt, "_sohbet_kimligi_dogru", lambda h: True)
     monkeypatch.setattr(tt, "_sohbette_mesaj_var", lambda: True)
     monkeypatch.setattr(tt, "_mesaj_yaz", lambda m: pytest.fail("yazılmamalı"))
     assert tt._dm_gonder_sonuc("x", "selam") == GonderimSonucu.ONCEKI_SOHBET
@@ -60,6 +61,7 @@ def test_onceki_sohbet(tt, monkeypatch):
 
 def test_gonderim(tt, monkeypatch):
     monkeypatch.setattr(tt, "_profilden_mesaj_ac", lambda h: True)
+    monkeypatch.setattr(tt, "_sohbet_kimligi_dogru", lambda h: True)
     monkeypatch.setattr(tt, "_sohbette_mesaj_var", lambda: False)
     yazilan = []
     monkeypatch.setattr(tt, "_mesaj_yaz", lambda m: yazilan.append(m) or GonderimSonucu.GONDERILDI)
@@ -219,3 +221,131 @@ def test_sohbet_kutusu_gec_yuklenirse_beklenir(sayfa, monkeypatch):
         <button data-e2e="message-button" onclick="setTimeout(() => document.body.insertAdjacentHTML(
           'beforeend','<div contenteditable=true role=textbox></div>'), 800)">Mesaj</button>""")
     assert t._profilden_mesaj_ac("halici") is True
+
+
+# --- canlı doğrulama (2026-10-13): Business Suite sohbeti iframe içinde --- #
+UID = "6673349541788861445"
+BIZ = "7626694154965713941"
+
+
+def _sohbet_iframe(kullanici, mesajlar="", liste=""):
+    """Business Suite'teki gibi: sohbet `tiktok.com/messages?scene=business&u=` iframe'inde."""
+    ic = (f'<div data-e2e="dm-new-conversation-list">{liste}</div>'
+          f'<p data-e2e="chat-uniqueid">{kullanici}</p>'
+          f'<div data-e2e="dm-new-message-list">{mesajlar}</div>'
+          '<div data-e2e="message-input-area"><div data-e2e="dm-new-input-editor">'
+          '<div contenteditable="true" role="textbox" aria-label="Mesaj gönder..."></div></div></div>')
+    # onclick özniteliği bir kez, srcdoc bir kez daha çözülür → çift kaçış
+    return ic.replace('"', "&amp;quot;")
+
+
+def _profil_ve_buton(sohbet_srcdoc):
+    return ('<h1 data-e2e="user-title">Halıcı</h1>'
+            '<button data-e2e="message-button" onclick="document.body.insertAdjacentHTML(\'beforeend\','
+            f'\'<iframe id=sohbet srcdoc=&quot;{sohbet_srcdoc}&quot;></iframe>\')">Mesaj</button>')
+
+
+@pytest.fixture
+def tt_dom(sayfa, monkeypatch):
+    t = _tt(sayfa)
+    monkeypatch.setattr(t, "_git", lambda url, bekle=2.5: None)
+    monkeypatch.setattr("ig_agent.tiktok.time.sleep", lambda sn: None)
+    t.KUTU_BEKLEME_MS = 3000
+    return t
+
+
+def _iframe_editor_metni(sayfa):
+    return sayfa.frame_locator("#sohbet").locator('[contenteditable="true"]').inner_text()
+
+
+def test_takip_penceresi_gizli_bildirimleri_almaz(sayfa):
+    sayfa.set_content('<div role="dialog" style="display:none">Bildirimler<a href="/@begenen">b</a></div>'
+                      '<div role="dialog" data-e2e="follow-info-popup"><a href="/@takip_ettigim">t</a></div>')
+    pencere = sayfa.query_selector(S.TAKIP_PENCERESI)
+    assert TikTokClient._pencere_kullanicilari(pencere) == ["takip_ettigim"]
+
+
+def test_iframe_sohbette_yeni_hesaba_yazar(tt_dom, sayfa):
+    sayfa.set_content(_profil_ve_buton(_sohbet_iframe("emretel46")))
+    assert tt_dom._dm_gonder_sonuc("emretel46", "selam") == GonderimSonucu.GONDERILDI
+    assert _iframe_editor_metni(sayfa).strip() == "selam"
+
+
+def test_iframe_sohbette_onceki_mesaj_varsa_yazmaz(tt_dom, sayfa):
+    mesaj = '<div data-e2e="dm-new-chat-item"><p>[Bu mesaj türü desteklenmiyor.]</p></div>'
+    sayfa.set_content(_profil_ve_buton(_sohbet_iframe("masalhaliyikama35", mesajlar=mesaj)))
+    assert tt_dom._dm_gonder_sonuc("masalhaliyikama35", "selam") == GonderimSonucu.ONCEKI_SOHBET
+    assert _iframe_editor_metni(sayfa).strip() == ""
+
+
+def test_metinsiz_mesaj_ogesi_de_onceki_sohbettir(tt_dom, sayfa):
+    # Çıkartma / video gibi metinsiz mesaj da önceki yazışmadır
+    mesaj = '<div data-e2e="dm-new-chat-item"><img src="x.png"></div>'
+    sayfa.set_content(_profil_ve_buton(_sohbet_iframe("halici", mesajlar=mesaj)))
+    assert tt_dom._dm_gonder_sonuc("halici", "selam") == GonderimSonucu.ONCEKI_SOHBET
+
+
+def test_sohbet_listesinde_konusmasi_varsa_onceki_sohbettir(tt_dom, sayfa, monkeypatch):
+    # Mesajlar henüz çizilmemiş olsa da sol listedeki konuşma kimliği hedefin uid'ini içeriyor
+    liste = f'<div data-e2e="dm-new-conversation-item" id="more-action-icon-0:1:{UID}:{BIZ}">Masal</div>'
+    sayfa.set_content(_profil_ve_buton(_sohbet_iframe("masalhaliyikama35", liste=liste)))
+    monkeypatch.setattr(tt_dom, "_sohbet_uid", lambda: UID)
+    assert tt_dom._dm_gonder_sonuc("masalhaliyikama35", "selam") == GonderimSonucu.ONCEKI_SOHBET
+    assert _iframe_editor_metni(sayfa).strip() == ""
+
+
+def test_baska_birinin_sohbeti_acildiysa_yazmaz(tt_dom, sayfa):
+    # u= parametresi tutmazsa listedeki ilk sohbet açılabilir — yanlış kişiye yazılmamalı
+    sayfa.set_content(_profil_ve_buton(_sohbet_iframe("baska_hesap")))
+    assert tt_dom._dm_gonder_sonuc("emretel46", "selam") == GonderimSonucu.BASARISIZ
+    assert _iframe_editor_metni(sayfa).strip() == ""
+
+
+def test_kimlik_basligi_yoksa_yazmaz(tt_dom, sayfa):
+    sohbet = _sohbet_iframe("x").replace("chat-uniqueid", "baska-bir-sey")
+    sayfa.set_content(_profil_ve_buton(sohbet))
+    assert tt_dom._dm_gonder_sonuc("x", "selam") == GonderimSonucu.BASARISIZ
+
+
+def test_ilk_sayfa_gecisi_kesilirse_tekrar_dener(monkeypatch):
+    t = TikTokClient(ayarlari_yukle("tiktok"))
+    monkeypatch.setattr("ig_agent.tiktok.time.sleep", lambda sn: None)
+    monkeypatch.setattr("ig_agent.tarayici.time.sleep", lambda sn: None)
+    cagri = []
+
+    class Sayfa:
+        url = "https://www.tiktok.com/business-suite/messages"
+
+        def goto(self, url, **kw):
+            cagri.append(url)
+            if len(cagri) == 1:
+                raise RuntimeError("Page.goto: net::ERR_ABORTED at " + url)
+
+    t._page = Sayfa()
+    t._git("https://www.tiktok.com/@x")
+    assert len(cagri) == 2
+
+
+def test_takip_penceresi_kaydirinca_yeni_hesaplar_yuklenir(sayfa):
+    # Kaydırılan kapsayıcı pencerenin DIŞINDA; sondaki gözcü görünür olunca 10 hesap
+    # daha yüklenir (TikTok'taki tembel yükleme gibi). Pencereyi kaydırmak işe yaramaz.
+    sayfa.set_content("""
+      <div id="kap" style="height:200px;overflow:auto">
+        <div data-e2e="follow-info-popup"><div id="liste"></div><div id="son" style="height:1px"></div></div>
+      </div>
+      <script>
+        const liste = document.getElementById('liste'), son = document.getElementById('son');
+        let n = 0;
+        const ekle = () => { for (let i = 0; i < 10; i++, n++)
+          liste.insertAdjacentHTML('beforeend', `<div style="height:40px"><a href="/@h${n}">h${n}</a></div>`); };
+        ekle();
+        const g = new IntersectionObserver(es => {
+          if (es.some(x => x.isIntersecting) && n < 30) { ekle(); g.unobserve(son); g.observe(son); }
+        }, {root: document.getElementById('kap')});
+        g.observe(son);
+      </script>""")
+    pencere = sayfa.query_selector(S.TAKIP_PENCERESI)
+    for _ in range(4):
+        TikTokClient._pencereyi_kaydir(pencere)
+        sayfa.wait_for_timeout(300)
+    assert len(set(TikTokClient._pencere_kullanicilari(pencere))) == 30

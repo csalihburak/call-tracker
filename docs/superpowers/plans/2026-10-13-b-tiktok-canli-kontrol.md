@@ -28,6 +28,24 @@ Seçicilerin hepsi `ig_agent/tiktok.py` → `class S` içinde. ✔ işaretliler
       `data-e2e="top-login-button"`) giriş sonrası hâlâ görünüyor demektir.
 - [ ] Bot "boşta — direkt DM kapalı — panelden açın" demeli.
 
+## 2a. 2026-10-13 akşamı canlı doğrulananlar (temizify oturumu)
+
+- ✔ Giriş algılama, `nav-profile` → `temizify`, `following-count`, `message-button`;
+  normal sayfalarda CAPTCHA yanlış alarmı yok.
+- ✔ Takip penceresi yalnızca `[data-e2e="follow-info-popup"]` (genel `role=dialog`
+  gizli Bildirimler penceresini yakalıyordu — düzeltildi).
+- ✔ Mesaj düğmesi işletme hesabında Business Suite'e gider; sohbet iframe'de
+  (`/messages?scene=business&u=<uid>`). İçinde: kutu `message-input-area`
+  contenteditable, kimlik `chat-uniqueid`, önceki mesaj `dm-new-chat-item`,
+  konuşma listesi `dm-new-conversation-item` (id'de uid). Kod bunlara göre güncellendi;
+  yazmadan önce `chat-uniqueid` hedefle eşleşmezse yazılmaz.
+- ✔ Business Suite "İşletme araçlarının kilidi açıldı → Başla" karşılaması geçildi.
+- ⏳ Yarın tek, yavaş bir okumayla doğrulanacak: takip listesi kaydırmasının 30'dan
+  fazla hesap getirmesi ve `dm-warning` metni. (Akşam art arda çok okuma yapılınca
+  sayfalar yavaşladı — doğrulama okumalarını aralıklı yap.)
+- ⚠️ Business Suite sohbet listesinde elle yazışılmış onlarca halıcı var (DB'de yok);
+  bot her hesapta yazmadan önce bunları `onceki_sohbet` olarak atlar.
+
 ## 2. Seçici doğrulama (mesaj göndermeden, tarayıcının geliştirici konsolunda)
 
 Bot penceresinde kendi profilini aç (`tiktok.com/@<kullanıcı adı>`) ve konsolda:
