@@ -68,6 +68,21 @@ class S:
     # Hikaye görüntüleyicide "sonraki" için olası etiketler
     HIKAYE_ILERI_ETIKETLERI = ['İleri', 'Sonraki', 'Next']
 
+    # Takip listesi (kendi profil → "Takip" penceresi)
+    def takip_url(kullanici: str) -> str:  # type: ignore[misc]
+        return f"{IG_TABAN}/{kullanici}/following/"
+
+    PROFIL_NAV_LINK = ['a[role="link"]:has-text("Profil")', 'a[role="link"]:has-text("Profile")']
+
+    # Profilde "Mesaj gönder" yoksa: /direct/new/ akışı
+    YENI_MESAJ_URL = f"{IG_TABAN}/direct/new/"
+    YENI_MESAJ_ARAMA = ('input[name="queryBox"], div[role="dialog"] input[placeholder*="Ara"], '
+                        'div[role="dialog"] input[placeholder*="Search"]')
+    YENI_MESAJ_SOHBET_METIN = ["Sohbet", "Chat", "İleri", "Next"]
+    # Instagram'ın açık "bu hesaba mesaj gönderilemez" metinleri (küçük harfle aranır)
+    DM_KAPALI_METIN = ["mesaj gönderemezsin", "mesaj gönderemezsiniz",
+                       "can't message", "cannot message", "isn't accepting messages"]
+
     # Keşif
     def tag_url(tag: str) -> str:  # type: ignore[misc]
         return f"{IG_TABAN}/explore/tags/{tag}/"
@@ -95,6 +110,8 @@ class AdayHesap:
 
 
 class InstagramClient:
+    platform = "instagram"
+
     def __init__(self, ayarlar: Ayarlar):
         self._ayarlar = ayarlar
         self._pw = None
@@ -363,6 +380,161 @@ class InstagramClient:
                     return True
             self._page.keyboard.press("ArrowRight")
             return True
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------ #
+    # Takip listesi turu (takip ettiklerimize direkt DM)
+    # ------------------------------------------------------------------ #
+    def kendi_kullanici_adi(self) -> str:
+        """Ayarda verilmişse o; yoksa sol menüdeki "Profil" bağlantısından."""
+        ayarli = (getattr(self._ayarlar, "kendi_kullanici_adi", "") or "").strip().lstrip("@")
+        if ayarli:
+            return ayarli
+        try:
+            self._git(IG_TABAN)
+            for secici in S.PROFIL_NAV_LINK:
+                el = self._page.query_selector(secici)
+                if not el:
+                    continue
+                eslesme = _PROFIL_YOLU.match(el.get_attribute("href") or "")
+                if eslesme and eslesme.group(1).lower() not in _AYRILMIS_YOLLAR:
+                    return eslesme.group(1)
+        except Exception:
+            pass
+        return ""
+
+    def takip_listesi_topla(self, max_hesap: int = 5000) -> list[str]:
+        """Kendi "Takip" penceremizi sonuna kadar kaydırıp kullanıcı adlarını toplar.
+
+        Profil açılınca pencere kapandığından liste gönderimden ÖNCE tamamen
+        toplanır. 4 kaydırmada yeni hesap gelmezse liste bitmiş sayılır.
+        """
+        kendi = self.kendi_kullanici_adi()
+        if not kendi:
+            print("[ig] ⚠️ kendi kullanıcı adı bulunamadı — panelden girin")
+            return []
+        toplanan: list[str] = []
+        try:
+            self._git(S.takip_url(kendi), bekle=3.0)
+            gorulen: set[str] = set()
+            bos_kaydirma = 0
+            while len(toplanan) < max_hesap and bos_kaydirma < 4:
+                dialog = self._page.query_selector(S.DIALOG)
+                if dialog is None:
+                    break
+                yeni = 0
+                for a in dialog.query_selector_all('a[href^="/"]'):
+                    eslesme = _PROFIL_YOLU.match(a.get_attribute("href") or "")
+                    if not eslesme:
+                        continue
+                    h = eslesme.group(1)
+                    if h.lower() in _AYRILMIS_YOLLAR or h == kendi or h in gorulen:
+                        continue
+                    gorulen.add(h)
+                    toplanan.append(h)
+                    yeni += 1
+                bos_kaydirma = 0 if yeni else bos_kaydirma + 1
+                self._diyalogu_kaydir(dialog)
+                time.sleep(self._rng.uniform(1.2, 2.5))
+        except Exception:
+            pass
+        finally:
+            try:
+                self._page.keyboard.press("Escape")
+            except Exception:
+                pass
+        return toplanan[:max_hesap]
+
+    @staticmethod
+    def _diyalogu_kaydir(dialog) -> None:
+        """Penceredeki kaydırılabilir öğeyi en alta kaydırır (tembel yükleme)."""
+        dialog.evaluate(
+            """d => {
+                const k = [d, ...d.querySelectorAll('*')].find(e =>
+                    e.scrollHeight > e.clientHeight + 10 &&
+                    getComputedStyle(e).overflowY !== 'visible');
+                if (k) k.scrollTop = k.scrollHeight;
+            }"""
+        )
+
+    def acilis_turu(self, karar_fn, sonuc_fn, yazmadan_once) -> None:
+        """Takip listesindeki her hesap için karar → tempo → DM → sonuç bildirimi.
+
+        `karar_fn(Hedef)`: metin → gönder, None → atla, TURU_BITIR → bitir.
+        `yazmadan_once()` profil açılmadan önce çağrılır (tempo beklemesi);
+        False dönerse tur biter.
+        """
+        for handle in self.takip_listesi_topla():
+            if self.checkpoint_var_mi():
+                break
+            hedef = Hedef(handle=handle, profile_url=f"{IG_TABAN}/{handle}/",
+                          kaynak="takip_listesi")
+            metin = karar_fn(hedef)
+            if metin == TURU_BITIR:
+                break
+            if not metin:
+                continue
+            if not yazmadan_once():
+                break
+            sonuc_fn(hedef, metin, self._dm_gonder_sonuc(handle, metin))
+            if self.engel_algilandi:
+                break
+
+    def _dm_gonder_sonuc(self, handle: str, metin: str) -> GonderimSonucu:
+        """Profil (yoksa /direct/new/) üzerinden sohbet açıp yazar.
+
+        DM_KAPALI yalnızca sayfada açık bir "mesaj gönderilemez" metni varsa
+        döner; seçici bulunamaması BASARISIZ'dır (yanlışlıkla toplu DNC olmasın).
+        """
+        try:
+            if not (self._profilden_mesaj_ac(handle) or self._yeni_mesajdan_ac(handle)):
+                return GonderimSonucu.DM_KAPALI if self._dm_kapali_uyarisi() \
+                    else GonderimSonucu.BASARISIZ
+            kutu = self._page.query_selector(S.MESAJ_KUTUSU)
+            if not kutu:
+                return GonderimSonucu.BASARISIZ
+            kutu.click()
+            self._insan_yaz(kutu, metin)
+            self._page.keyboard.press("Enter")
+            time.sleep(self._rng.uniform(0.8, 1.8))
+            if self._engel_kontrol():
+                return GonderimSonucu.BASARISIZ
+            if self._dm_kapali_uyarisi():
+                return GonderimSonucu.DM_KAPALI
+            return GonderimSonucu.GONDERILDI
+        except Exception:
+            return GonderimSonucu.BASARISIZ
+
+    def _yeni_mesajdan_ac(self, handle: str) -> bool:
+        """/direct/new/ → kullanıcı adını ara → sonucu seç → "Sohbet"."""
+        try:
+            self._git(S.YENI_MESAJ_URL, bekle=2.0)
+            ara = self._page.query_selector(S.YENI_MESAJ_ARAMA)
+            if not ara:
+                return False
+            ara.click()
+            self._insan_yaz(ara, handle)
+            time.sleep(self._rng.uniform(2.0, 3.5))
+            secim = self._page.query_selector(f'{S.DIALOG} :text-is("{handle}")')
+            if not secim:
+                return False
+            secim.click()
+            time.sleep(self._rng.uniform(0.8, 1.5))
+            for etiket in S.YENI_MESAJ_SOHBET_METIN:
+                btn = self._page.query_selector(f'{S.DIALOG} div[role="button"]:has-text("{etiket}")')
+                if btn:
+                    btn.click()
+                    time.sleep(self._rng.uniform(1.5, 3.0))
+                    break
+            return self._page.query_selector(S.MESAJ_KUTUSU) is not None
+        except Exception:
+            return False
+
+    def _dm_kapali_uyarisi(self) -> bool:
+        try:
+            metin = (self._page.inner_text("body") or "").lower()
+            return any(k in metin for k in S.DM_KAPALI_METIN)
         except Exception:
             return False
 
