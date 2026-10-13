@@ -100,7 +100,8 @@ def main(argv=None) -> None:
     try:
         beyin = OpenAIIstemci(temel)
         bildirim = AlertClient(temel)
-        # Sheets senkronu tek süreçten (Instagram) yapılır; tüm platformların lead'lerini taşır
+        # Sheets senkronu tek süreçten (Instagram) yapılır: Pipeline yalnız IG lead'leri,
+        # mesaj/olay logları tüm platformlar ("tiktok:kullanici")
         sheets_yazici = _sheets_yazici(temel) if platform == "instagram" else None
         rng = random.Random()
 

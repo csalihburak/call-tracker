@@ -28,6 +28,12 @@ class SheetYazici(Protocol):
     def olay_append(self, satir: dict) -> None: ...
 
 
+# Mesaj/olay loglarındaki hesap sütunu: Instagram'da kullanıcı adı (eskisi gibi),
+# diğer platformlarda "tiktok:kullanici" (TikTok lead'inde ig_handle boştur)
+_HANDLE_SQL = ("CASE WHEN COALESCE(l.platform, 'instagram') = 'instagram' THEN l.ig_handle "
+               "ELSE l.platform || ':' || l.handle END")
+
+
 def flush(conn: sqlite3.Connection, yazici: SheetYazici, limit: int = 200) -> dict:
     """Kirli/senkronsuz satırları Sheets'e yazar, bayrakları temizler.
 
@@ -48,7 +54,7 @@ def flush(conn: sqlite3.Connection, yazici: SheetYazici, limit: int = 200) -> di
 
     # 2) Mesajlar — append
     mesajlar = conn.execute(
-        "SELECT m.*, l.ig_handle AS ig_handle FROM ig_messages m "
+        f"SELECT m.*, {_HANDLE_SQL} AS ig_handle FROM ig_messages m "
         "JOIN leads l ON l.id=m.lead_id "
         "WHERE COALESCE(m.synced_to_sheet,0)=0 ORDER BY m.id LIMIT ?",
         (limit,),
@@ -64,7 +70,7 @@ def flush(conn: sqlite3.Connection, yazici: SheetYazici, limit: int = 200) -> di
 
     # 3) Olaylar — append
     olaylar = conn.execute(
-        "SELECT e.*, l.ig_handle AS ig_handle FROM sales_events e "
+        f"SELECT e.*, {_HANDLE_SQL} AS ig_handle FROM sales_events e "
         "JOIN leads l ON l.id=e.lead_id "
         "WHERE COALESCE(e.synced_to_sheet,0)=0 ORDER BY e.id LIMIT ?",
         (limit,),

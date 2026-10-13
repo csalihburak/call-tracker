@@ -153,6 +153,8 @@ class TarayiciIstemci:
         """Takip listesindeki her hesap için karar → tempo → DM → sonuç bildirimi.
 
         `karar_fn(Hedef)`: metin → gönder, None → atla, TURU_BITIR → bitir.
+        `_hedef_uygun_mu(handle)` False dönerse hesap tempo beklemesi ve sonuç
+        bildirimi olmadan atlanır (varsayılan: her hedef uygun).
         `yazmadan_once()` profil açılmadan önce çağrılır (tempo beklemesi);
         False dönerse tur biter.
         """
@@ -165,11 +167,17 @@ class TarayiciIstemci:
                 break
             if not metin:
                 continue
+            if not self._hedef_uygun_mu(handle):
+                continue
             if not yazmadan_once():
                 break
             sonuc_fn(hedef, metin, self._dm_gonder_sonuc(handle, metin))
             if self.engel_algilandi:
                 break
+
+    def _hedef_uygun_mu(self, handle: str) -> bool:
+        """Tempo beklemesinden önce hedefe yazılabilir mi (alt sınıf; varsayılan evet)."""
+        return True
 
     # Alt sınıfın sağladıkları
     def giris_yapildi_mi(self) -> bool:

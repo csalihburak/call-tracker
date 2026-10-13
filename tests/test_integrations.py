@@ -117,3 +117,17 @@ def test_flush_yeni_degisiklik_tekrar_kirletir(conn):
     sayac = sheets.flush(conn, yazici)
     assert sayac["pipeline"] == 1
     assert yazici.pipeline[0]["stage"] == "deneme"
+
+
+def test_flush_tiktok_mesajlari_platformlu_handle_ile(conn):
+    # Final inceleme #4: TikTok lead'inde ig_handle NULL → Sheets'e "None" gitmemeli
+    tt = repo.lead_upsert(conn, platform="tiktok", handle="halici_tt")
+    repo.mesaj_ekle(conn, tt, "dm_opener", "selam")
+    repo.olay_ekle(conn, tt, "handoff")
+    ig = repo.ig_lead_upsert(conn, ig_handle="soz", business_name="S")
+    repo.mesaj_ekle(conn, ig, "story_reply", "x")
+    yazici = SahteYazici()
+    sheets.flush(conn, yazici)
+    assert {m["ig_handle"] for m in yazici.mesaj} == {"tiktok:halici_tt", "soz"}
+    assert yazici.olay[0]["ig_handle"] == "tiktok:halici_tt"
+    assert [p["ig_handle"] for p in yazici.pipeline] == ["soz"]  # Pipeline yalnız IG
