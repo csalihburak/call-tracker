@@ -56,3 +56,21 @@ class PlatformIstemci(Protocol):
     def acilis_turu(
         self, karar_fn: KararFn, sonuc_fn: SonucFn, yazmadan_once: Callable[[], bool]
     ) -> None: ...
+
+
+def istemci_olustur(platform: str, ayarlar) -> PlatformIstemci:
+    """Platformun tarayıcı istemcisini üretir (tarayıcı henüz açılmaz).
+
+    İçe aktarmalar gecikmelidir: istemci modülleri bu modülü içe aktarır.
+    """
+    if platform == "instagram":
+        from .instagram import InstagramClient
+
+        return InstagramClient(ayarlar)
+    if platform == "tiktok":
+        from .tiktok import TikTokClient
+
+        return TikTokClient(ayarlar)
+    if platform == "facebook":
+        raise ValueError("Facebook istemcisi henüz yok (parça C)")
+    raise ValueError(f"bilinmeyen platform: {platform}")
