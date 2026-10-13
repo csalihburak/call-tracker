@@ -12,10 +12,12 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Optional
 
+from . import platformlar
+
 INSTAGRAM_KAYNAK = "Instagram"
 KAPALI_ASAMALAR = ("musteri", "kayip")
 # platform → leads.source (call-tracker'daki kaynak filtresiyle uyumlu)
-PLATFORM_KAYNAK = {"instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook"}
+PLATFORM_KAYNAK = platformlar.PLATFORM_ADI
 
 
 # --------------------------------------------------------------------------- #
@@ -472,49 +474,57 @@ def bugun_kesif_sayisi(baglanti: sqlite3.Connection) -> int:
 # --------------------------------------------------------------------------- #
 # Bot durumu (anahtar-değer) — operatör kontrolü + warmup
 # --------------------------------------------------------------------------- #
+# Her fonksiyonun `platform` parametresi anahtarı `platformlar.anahtar` ile
+# çevirir: Instagram öneksiz, diğerleri `tiktok:master_paused` gibi.
 def durum_getir(
-    baglanti: sqlite3.Connection, anahtar: str, varsayilan: str = ""
+    baglanti: sqlite3.Connection,
+    anahtar: str,
+    varsayilan: str = "",
+    platform: str = "instagram",
 ) -> str:
     satir = baglanti.execute(
-        "SELECT value FROM bot_state WHERE key = ?", (anahtar,)
+        "SELECT value FROM bot_state WHERE key = ?",
+        (platformlar.anahtar(platform, anahtar),),
     ).fetchone()
     return satir["value"] if satir else varsayilan
 
 
-def durum_ayarla(baglanti: sqlite3.Connection, anahtar: str, deger: Any) -> None:
+def durum_ayarla(
+    baglanti: sqlite3.Connection, anahtar: str, deger: Any, platform: str = "instagram"
+) -> None:
     with baglanti:
         baglanti.execute(
             "INSERT INTO bot_state (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (anahtar, str(deger)),
+            (platformlar.anahtar(platform, anahtar), str(deger)),
         )
 
 
 def bayrak_getir(
-    baglanti: sqlite3.Connection, anahtar: str, varsayilan: bool = False
+    baglanti: sqlite3.Connection,
+    anahtar: str,
+    varsayilan: bool = False,
+    platform: str = "instagram",
 ) -> bool:
-    return durum_getir(baglanti, anahtar, "1" if varsayilan else "0") in (
+    return durum_getir(baglanti, anahtar, "1" if varsayilan else "0", platform) in (
         "1",
         "true",
         "True",
     )
 
 
-def nabiz_at(baglanti: sqlite3.Connection, durum: Optional[str] = None) -> None:
+def nabiz_at(
+    baglanti: sqlite3.Connection, durum: Optional[str] = None, platform: str = "instagram"
+) -> None:
     """Botun ayakta olduğunu (ve istenirse o an ne yaptığını) panele bildirir."""
+    sql = ("INSERT INTO bot_state (key, value) VALUES (?, ?) "
+           "ON CONFLICT(key) DO UPDATE SET value = excluded.value")
     with baglanti:
-        baglanti.execute(
-            "INSERT INTO bot_state (key, value) VALUES ('bot_nabiz', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (datetime.now().isoformat(timespec="seconds"),),
-        )
+        baglanti.execute(sql, (platformlar.anahtar(platform, "bot_nabiz"),
+                               datetime.now().isoformat(timespec="seconds")))
         if durum is not None:
-            baglanti.execute(
-                "INSERT INTO bot_state (key, value) VALUES ('bot_durum', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (durum,),
-            )
+            baglanti.execute(sql, (platformlar.anahtar(platform, "bot_durum"), durum))
 
 
-def hata_kaydet(baglanti: sqlite3.Connection, hata: Any) -> None:
-    durum_ayarla(baglanti, "son_hata", f"{datetime.now():%Y-%m-%d %H:%M:%S} · {hata}")
+def hata_kaydet(baglanti: sqlite3.Connection, hata: Any, platform: str = "instagram") -> None:
+    durum_ayarla(baglanti, "son_hata", f"{datetime.now():%Y-%m-%d %H:%M:%S} · {hata}", platform)

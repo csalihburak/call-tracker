@@ -1,4 +1,4 @@
-"""Platform istemcilerinin (Instagram, ileride TikTok/Facebook) ortak tipleri.
+"""Platform istemcilerinin (Instagram, TikTok, ileride Facebook) ortak tipleri.
 
 Zamanlayıcı yalnızca bu arayüzü görür: istemci hedefleri gezer, her hedef için
 `karar_fn` ile ne yazılacağını sorar, gönderir ve sonucu `sonuc_fn` ile bildirir.
@@ -10,6 +10,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional, Protocol
+
+PLATFORMLAR = ("instagram", "tiktok", "facebook")
+# Bot süreci çalıştırılabilen (istemcisi yazılmış) platformlar
+DESTEKLENEN_PLATFORMLAR = ("instagram", "tiktok")
+PLATFORM_ADI = {"instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook"}
+
+
+def anahtar(platform: str, ad: str) -> str:
+    """`bot_state` anahtarı. Instagram öneksizdir (canlı DB'deki `master_paused`,
+    `ayar.*` vb. olduğu gibi geçerli kalsın); diğerleri `platform:ad`."""
+    return ad if platform == "instagram" else f"{platform}:{ad}"
+
 
 # karar_fn bunu dönerse tur hemen biter (duraklatıldı, kota doldu, saat bitti)
 TURU_BITIR = "__TURU_BITIR__"

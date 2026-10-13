@@ -208,3 +208,36 @@ def test_dm_opener_mesaji_ve_sayaclar(baglanti):
     assert repo.son_saat_dm_acilis_sayisi(baglanti, platform="tiktok") == 0
     # hikaye sayaçları DM'i saymaz
     assert repo.son_saat_acilis_sayisi(baglanti) == 1
+
+
+# --------------------------------------------------------------------------- #
+# bot_state platform önekleri (parça B)
+# --------------------------------------------------------------------------- #
+from ig_agent import platformlar  # noqa: E402
+
+
+def test_anahtar_instagram_oneksiz():
+    assert platformlar.anahtar("instagram", "master_paused") == "master_paused"
+    assert platformlar.anahtar("tiktok", "master_paused") == "tiktok:master_paused"
+    assert platformlar.anahtar("tiktok", "ayar.") == "tiktok:ayar."
+
+
+def test_bot_state_platform_ayrimi(baglanti):
+    repo.durum_ayarla(baglanti, "master_paused", "0")
+    repo.durum_ayarla(baglanti, "master_paused", "1", platform="tiktok")
+    assert repo.bayrak_getir(baglanti, "master_paused") is False
+    assert repo.bayrak_getir(baglanti, "master_paused", platform="tiktok") is True
+    assert repo.durum_getir(baglanti, "tiktok:master_paused") == "1"
+    # TikTok hiç yazılmamış bayrakta varsayılana düşer, IG değerini görmez
+    repo.durum_ayarla(baglanti, "dm_acilis_aktif", "1")
+    assert repo.bayrak_getir(baglanti, "dm_acilis_aktif", False, platform="tiktok") is False
+
+
+def test_nabiz_ve_hata_platformlu(baglanti):
+    repo.nabiz_at(baglanti, "tiktok turu", platform="tiktok")
+    repo.hata_kaydet(baglanti, "patladı", platform="tiktok")
+    assert repo.durum_getir(baglanti, "tiktok:bot_durum") == "tiktok turu"
+    assert repo.durum_getir(baglanti, "tiktok:bot_nabiz")
+    assert "patladı" in repo.durum_getir(baglanti, "tiktok:son_hata")
+    assert repo.durum_getir(baglanti, "bot_durum") == ""
+    assert repo.durum_getir(baglanti, "son_hata") == ""
