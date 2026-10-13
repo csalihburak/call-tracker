@@ -302,3 +302,54 @@ def test_islenen_mesaj_tekrar_kuyruga_girmez(ortam):
     assert repo.yanit_bekleyen_threadler(conn) == []
     repo.mesaj_ekle(conn, lid, "inbound", "yeni soru")
     assert [r["id"] for r in repo.yanit_bekleyen_threadler(conn)] == [lid]
+
+
+def test_sifir_gun_eski_iletisime_asla_tekrar_yazmaz(ortam):
+    conn, ayarlar, lead = ortam
+    ayarlar.yeniden_iletisim_gun = 0
+    eski = repo.ig_lead_upsert(conn, ig_handle="eski", business_name="E")
+    repo.mesaj_ekle(conn, eski, "story_reply", "Kolay gelsin")
+    conn.execute("UPDATE ig_messages SET sent_at = '2025-01-01 10:00:00' WHERE lead_id = ?", (eski,))
+    conn.commit()
+    ig = SahteHikayeIG(["eski", "yepyeni"])
+    assert _tur(conn, ayarlar, ig) == 1 and ig.gonderilen == ["yepyeni"]
+
+
+def test_gun_verilirse_sure_dolunca_tekrar_yazar(ortam):
+    conn, ayarlar, lead = ortam
+    ayarlar.yeniden_iletisim_gun = 30
+    eski = repo.ig_lead_upsert(conn, ig_handle="eski", business_name="E")
+    repo.mesaj_ekle(conn, eski, "story_reply", "Kolay gelsin")
+    conn.execute("UPDATE ig_messages SET sent_at = '2025-01-01 10:00:00' WHERE lead_id = ?", (eski,))
+    conn.commit()
+    assert _tur(conn, ayarlar, SahteHikayeIG(["eski"])) == 1
+
+
+def test_bize_yazmis_hesaba_acilis_yapilmaz(ortam):
+    conn, ayarlar, lead = ortam
+    # fixture'daki 'soz' hesabı bize yazmış (inbound) ama biz hiç yazmamışız
+    ig = SahteHikayeIG(["soz"])
+    assert _tur(conn, ayarlar, ig) == 0
+
+
+def test_acilis_metni_baglami_beyne_iletir(ortam):
+    conn, ayarlar, lead = ortam
+
+    class SahteBeyin:
+        def __init__(self):
+            self.baglamlar = []
+
+        def acilis_uret(self, ayarlar, lead, baglam="hikaye"):
+            self.baglamlar.append(baglam)
+            return f"metin-{baglam}"
+
+    beyin = SahteBeyin()
+    assert sch._acilis_metni(beyin, ayarlar, None) == "metin-hikaye"
+    assert sch._acilis_metni(beyin, ayarlar, None, baglam="dm") == "metin-dm"
+    assert beyin.baglamlar == ["hikaye", "dm"]
+
+
+def test_turu_bitir_tek_kaynak():
+    from ig_agent import instagram, platformlar
+
+    assert instagram.TURU_BITIR is platformlar.TURU_BITIR

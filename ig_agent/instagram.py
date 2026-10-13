@@ -20,12 +20,9 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from .config import Ayarlar
+from .platformlar import TURU_BITIR, GonderimSonucu, Hedef  # noqa: F401 — TURU_BITIR dışa verilir
 
 IG_TABAN = "https://www.instagram.com"
-
-# hikayeleri_yanitla'daki karar_fn bunu dönerse tur hemen biter
-# (duraklatıldı, kota doldu, çalışma saati bitti vb.)
-TURU_BITIR = "__TURU_BITIR__"
 
 # Profil linki olamayacak tek parçalı IG yolları
 _AYRILMIS_YOLLAR = {

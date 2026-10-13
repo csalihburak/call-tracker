@@ -124,6 +124,12 @@ class PacingAyarlari:
     # Hikaye tepsisini yeniden gezmeden önce beklenecek süre (saniye)
     hikaye_turu_cooldown_sn: int = 600
 
+    # Takip listesinden direkt DM açılışı (hikaye yanıtından AYRI tavan). 0 = sınırsız.
+    dm_acilis_saatlik: int = 15
+    dm_acilis_gunluk: int = 80
+    # Direkt DM turunu yeniden başlatmadan önce beklenecek süre (saniye)
+    dm_turu_cooldown_sn: int = 1800
+
     # Aksiyonlar arası insan benzeri bekleme (saniye)
     aksiyon_bekleme_min: float = 45.0
     aksiyon_bekleme_max: float = 180.0
@@ -146,13 +152,17 @@ class Ayarlar:
     whatsapp_numarasi: str = ""
     whatsapp_link: str = ""
 
-    # Bu kadar gün içinde mesaj attığımız hesaba yeniden açılış YAPMA
-    yeniden_iletisim_gun: int = 30
+    # Bu kadar gün içinde mesajlaştığımız hesaba yeniden açılış YAPMA.
+    # 0 = süre sınırı yok: bir kez yazılan hesaba bir daha asla açılış yapılmaz.
+    yeniden_iletisim_gun: int = 0
 
     # Açılış metni: "gpt" → her hikayeye GPT ile çeşitlendirilmiş metin,
     # "sabit" → `acilis_metinleri` satırlarından rastgele biri
     acilis_modu: str = "gpt"
     acilis_metinleri: str = ""
+
+    # Kendi IG kullanıcı adımız (takip listesi için). Boşsa sayfadan bulunur.
+    kendi_kullanici_adi: str = ""
 
     gpt: GptAyarlari = field(default_factory=GptAyarlari)
     sheets: SheetsAyarlari = field(default_factory=SheetsAyarlari)
@@ -174,8 +184,9 @@ def ayarlari_yukle() -> Ayarlar:
         sehirler=_liste("IG_SEHIRLER", VARSAYILAN_SEHIRLER),
         whatsapp_numarasi=_str("IG_WHATSAPP_NUMARASI"),
         whatsapp_link=_str("IG_WHATSAPP_LINK"),
-        yeniden_iletisim_gun=_int("IG_YENIDEN_ILETISIM_GUN", 30),
+        yeniden_iletisim_gun=_int("IG_YENIDEN_ILETISIM_GUN", 0),
         acilis_modu=_str("IG_ACILIS_MODU", "gpt"),
+        kendi_kullanici_adi=_str("IG_KULLANICI_ADI"),
         gpt=GptAyarlari(
             api_anahtari=_str("OPENAI_API_KEY"),
             model=_str("IG_GPT_MODEL", "gpt-4o"),
@@ -200,6 +211,9 @@ def ayarlari_yukle() -> Ayarlar:
             calisma_baslangic_saat=_int("IG_CALISMA_BASLANGIC", 10),
             calisma_bitis_saat=_int("IG_CALISMA_BITIS", 21),
             hikaye_turu_cooldown_sn=_int("IG_HIKAYE_COOLDOWN_SN", 600),
+            dm_acilis_saatlik=_int("IG_DM_ACILIS_SAATLIK", 15),
+            dm_acilis_gunluk=_int("IG_DM_ACILIS_GUNLUK", 80),
+            dm_turu_cooldown_sn=_int("IG_DM_TURU_COOLDOWN_SN", 1800),
             aksiyon_bekleme_min=_float("IG_BEKLEME_MIN", 45.0),
             aksiyon_bekleme_max=_float("IG_BEKLEME_MAX", 180.0),
         ),

@@ -4,7 +4,7 @@
 
 **Goal:** Bot, hikaye turundan sonra Instagram'da takip ettiğimiz ama hiç yazışmadığımız hesaplara ayrı kotayla direkt DM açılışı atsın; veri modeli TikTok/Facebook'a hazır (platformlu) olsun.
 
-**Architecture:** `sales.db` şeması additive olarak platformlu hale gelir (`leads.platform/handle`, `dnc` tablosu, `dm_opener` mesaj yönü). Yeni `platform.py` ortak tipleri (`Hedef`, `GonderimSonucu`, `TURU_BITIR`) taşır. `scheduler.direkt_dm_turu_yap` hikaye turunun kalıbını izler ve istemcinin `acilis_turu(karar_fn, sonuc_fn, yazmadan_once)` metodunu sürer; `InstagramClient.acilis_turu` takip listesini toplayıp profil → DM gönderir. Panelde aç/kapa, kota ve sayaçlar.
+**Architecture:** `sales.db` şeması additive olarak platformlu hale gelir (`leads.platform/handle`, `dnc` tablosu, `dm_opener` mesaj yönü). Yeni `platformlar.py` ortak tipleri (`Hedef`, `GonderimSonucu`, `TURU_BITIR`) taşır. `scheduler.direkt_dm_turu_yap` hikaye turunun kalıbını izler ve istemcinin `acilis_turu(karar_fn, sonuc_fn, yazmadan_once)` metodunu sürer; `InstagramClient.acilis_turu` takip listesini toplayıp profil → DM gönderir. Panelde aç/kapa, kota ve sayaçlar.
 
 **Tech Stack:** Python 3.12, SQLite (WAL), Playwright (sync), Streamlit, pytest.
 
@@ -42,7 +42,7 @@
 |---|---|---|
 | `ig_agent/db.py` | Değişir | Platform kolonları, geriye dönük doldurma, `(platform, handle)` indeksi, `dnc` tablosu |
 | `ig_agent/repository.py` | Değişir | `lead_upsert`, `lead_getir_platform`, platformlu `yakin_zamanda_iletisim`, `dnc_*`, `dm_opener` sayaçları |
-| `ig_agent/platform.py` | **Yeni** | `TURU_BITIR`, `GonderimSonucu`, `Hedef`, `PlatformIstemci` protokolü |
+| `ig_agent/platformlar.py` | **Yeni** | `TURU_BITIR`, `GonderimSonucu`, `Hedef`, `PlatformIstemci` protokolü |
 | `ig_agent/config.py` | Değişir | `dm_acilis_saatlik/gunluk`, `dm_turu_cooldown_sn`, `kendi_kullanici_adi` |
 | `ig_agent/canli_ayarlar.py` | Değişir | Yeni panel alanları |
 | `ig_agent/llm_openai.py` | Değişir | `acilis_uret(..., baglam)` |
@@ -521,16 +521,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 3: Platform tipleri, ayarlar ve DM açılış metni
 
 **Files:**
-- Create: `ig_agent/platform.py`
+- Create: `ig_agent/platformlar.py`
 - Modify: `ig_agent/instagram.py:24-28` (`TURU_BITIR` taşınır), `ig_agent/config.py`, `ig_agent/canli_ayarlar.py`, `ig_agent/llm_openai.py`, `ig_agent/scheduler.py` (`_acilis_metni`, import)
 - Test: `tests/test_canli_ayarlar.py`, `tests/test_scheduler.py`
 
 **Interfaces:**
 - Produces:
-  - `platform.TURU_BITIR: str` (`instagram.TURU_BITIR` aynı nesneyi yeniden dışa verir)
-  - `platform.GonderimSonucu` (`str, Enum`): `GONDERILDI="gonderildi"`, `BASARISIZ="basarisiz"`, `DM_KAPALI="dm_kapali"`
-  - `platform.Hedef` (frozen dataclass): `handle: str`, `ad: str = ""`, `profile_url: str = ""`, `kaynak: str = ""`
-  - `platform.PlatformIstemci` protokolü: `platform: str`, `engel_algilandi: bool`, `acilis_turu(karar_fn, sonuc_fn, yazmadan_once) -> None`
+  - `platformlar.TURU_BITIR: str` (`instagram.TURU_BITIR` aynı nesneyi yeniden dışa verir)
+  - `platformlar.GonderimSonucu` (`str, Enum`): `GONDERILDI="gonderildi"`, `BASARISIZ="basarisiz"`, `DM_KAPALI="dm_kapali"`
+  - `platformlar.Hedef` (frozen dataclass): `handle: str`, `ad: str = ""`, `profile_url: str = ""`, `kaynak: str = ""`
+  - `platformlar.PlatformIstemci` protokolü: `platform: str`, `engel_algilandi: bool`, `acilis_turu(karar_fn, sonuc_fn, yazmadan_once) -> None`
   - `PacingAyarlari.dm_acilis_saatlik: int = 15`, `dm_acilis_gunluk: int = 80`, `dm_turu_cooldown_sn: int = 1800`
   - `Ayarlar.kendi_kullanici_adi: str = ""`
   - `scheduler._acilis_metni(beyin_istemci, ayarlar, lead, rng=None, baglam: str = "hikaye") -> str`
@@ -575,9 +575,9 @@ def test_acilis_metni_baglami_beyne_iletir(ortam):
 
 
 def test_turu_bitir_tek_kaynak():
-    from ig_agent import instagram, platform
+    from ig_agent import instagram, platformlar
 
-    assert instagram.TURU_BITIR is platform.TURU_BITIR
+    assert instagram.TURU_BITIR is platformlar.TURU_BITIR
 ```
 
 - [ ] **Step 2: Çalıştır**
@@ -587,7 +587,7 @@ Expected: yeni 3 test FAIL.
 
 - [ ] **Step 3: Uygula**
 
-`ig_agent/platform.py`:
+`ig_agent/platformlar.py`:
 
 ```python
 """Platform istemcilerinin (Instagram, ileride TikTok/Facebook) ortak tipleri.
@@ -639,10 +639,10 @@ class PlatformIstemci(Protocol):
 `ig_agent/instagram.py`: `TURU_BITIR = "__TURU_BITIR__"` satırını ve üstündeki iki yorum satırını sil; importlara ekle:
 
 ```python
-from .platform import TURU_BITIR, GonderimSonucu, Hedef  # noqa: F401 — TURU_BITIR dışa verilir
+from .platformlar import TURU_BITIR, GonderimSonucu, Hedef  # noqa: F401 — TURU_BITIR dışa verilir
 ```
 
-`ig_agent/scheduler.py`: `from .instagram import TURU_BITIR` → `from .platform import TURU_BITIR, GonderimSonucu, Hedef`.
+`ig_agent/scheduler.py`: `from .instagram import TURU_BITIR` → `from .platformlar import TURU_BITIR, GonderimSonucu, Hedef`.
 
 `ig_agent/config.py` — `PacingAyarlari` içinde `hikaye_turu_cooldown_sn`'den sonra:
 
@@ -732,7 +732,7 @@ Expected: hepsi PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ig_agent/platform.py ig_agent/instagram.py ig_agent/scheduler.py ig_agent/config.py ig_agent/canli_ayarlar.py ig_agent/llm_openai.py tests/test_canli_ayarlar.py tests/test_scheduler.py
+git add ig_agent/platformlar.py ig_agent/instagram.py ig_agent/scheduler.py ig_agent/config.py ig_agent/canli_ayarlar.py ig_agent/llm_openai.py tests/test_canli_ayarlar.py tests/test_scheduler.py
 git commit -m "feat: platform tipleri, direkt DM ayarları ve DM açılış bağlamı
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -786,7 +786,7 @@ Dosya sonuna:
 # --------------------------------------------------------------------------- #
 # direkt_dm_turu_yap (takip listesinden DM açılışı)
 # --------------------------------------------------------------------------- #
-from ig_agent.platform import GonderimSonucu, Hedef  # noqa: E402
+from ig_agent.platformlar import GonderimSonucu, Hedef  # noqa: E402
 
 
 class SahteDMIstemci:
@@ -1200,7 +1200,7 @@ import pytest
 
 from ig_agent.config import Ayarlar
 from ig_agent.instagram import InstagramClient
-from ig_agent.platform import TURU_BITIR, GonderimSonucu
+from ig_agent.platformlar import TURU_BITIR, GonderimSonucu
 
 
 @pytest.fixture
@@ -1655,7 +1655,7 @@ denenmez. Takip etmeyenlere giden DM'ler karşı tarafta "mesaj istekleri"ne dü
 Kullanıcı adı panelden girilebilir; boşsa sol menüdeki Profil bağlantısından bulunur.
 ```
 
-Tablodaki modül listesine: `| \`platform.py\` | Platform istemcilerinin ortak tipleri (Hedef, GonderimSonucu) |`.
+Tablodaki modül listesine: `| \`platformlar.py\` | Platform istemcilerinin ortak tipleri (Hedef, GonderimSonucu) |`.
 "Kurulum" bölümünde `python -m venv .venv` satırını `python3.12 -m venv .venv` yap.
 
 - [ ] **Step 2: Commit**

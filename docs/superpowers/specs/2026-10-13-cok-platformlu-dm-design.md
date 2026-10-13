@@ -102,7 +102,7 @@ semantik). Mevcut imzayı kullanan çağrılar için `platform` varsayılanı `i
 | Dosya | Değişiklik |
 |---|---|
 | `tarayici.py` (yeni) | `InstagramClient`'teki ortak Playwright kodu: kalıcı profil başlat/kapat, `_git`, `_insan_yaz`, `engel_algilandi`, checkpoint/engel kontrol iskeleti. |
-| `platform.py` (yeni) | `PlatformIstemci` protokolü, `GonderimSonucu` (`GONDERILDI` \| `BASARISIZ` \| `DM_KAPALI`), `istemci_olustur(platform, ayarlar)`. |
+| `platformlar.py` (yeni) | `PlatformIstemci` protokolü, `GonderimSonucu` (`GONDERILDI` \| `BASARISIZ` \| `DM_KAPALI`), `istemci_olustur(platform, ayarlar)`. |
 | `instagram.py` | `tarayici.py` temeline taşınır, davranış aynı. Yeni: `takip_listesi_topla()`, `acilis_turu(...)`, `dm_gonder` → `GonderimSonucu`. |
 | `tiktok.py` (yeni) | Giriş kontrolü, CAPTCHA/doğrulama tespiti, takip listesi, profil "Mesaj" düğmesiyle DM. Seçiciler `S` sınıfında. |
 | `facebook.py` (yeni) | Giriş kontrolü, grup listesi, grup akışından gönderi yazarları, Messenger DM, şifreleme PIN ekranı tespiti. Seçiciler `S` sınıfında. |
@@ -236,7 +236,7 @@ yapan bir işletmeye Messenger'dan ilk mesaj").
 
 Her parça ayrı uygulama planıyla:
 
-- **A — Instagram:** veri modeli (bölüm 2), `platform.py` + `GonderimSonucu`,
+- **A — Instagram:** veri modeli (bölüm 2), `platformlar.py` + `GonderimSonucu`,
   `direkt_dm_turu_yap`, IG takip listesi turu, panelde IG direkt DM ayar/sayaçları.
 - **B — TikTok:** `tarayici.py` temeli (IG'nin taşınması), `tiktok.py`,
   `run.py --platform`, `surec.py`, panelde platform seçici.

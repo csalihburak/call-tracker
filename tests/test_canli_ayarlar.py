@@ -67,3 +67,16 @@ def test_surec_yoksa_kapali(ortam):
     conn, _ = ortam
     assert surec.durum(conn)["surec_var"] is False
     assert surec.durdur(conn) is False
+
+
+def test_dm_ayarlari_bindirilir(ortam):
+    conn, temel = ortam
+    assert temel.pacing.dm_acilis_saatlik == 15 and temel.pacing.dm_acilis_gunluk == 80
+    canli_ayarlar.kaydet(conn, {
+        "dm_acilis_saatlik": 5, "dm_acilis_gunluk": 20,
+        "dm_turu_cooldown_sn": 900, "kendi_kullanici_adi": "temizify.app",
+    })
+    a = canli_ayarlar.uygula(conn, temel)
+    assert a.pacing.dm_acilis_saatlik == 5 and a.pacing.dm_acilis_gunluk == 20
+    assert a.pacing.dm_turu_cooldown_sn == 900
+    assert a.kendi_kullanici_adi == "temizify.app"

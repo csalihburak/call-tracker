@@ -17,7 +17,7 @@ from typing import Callable, Optional, Protocol
 
 from . import brain, pacing, repository as repo
 from .config import Ayarlar
-from .instagram import TURU_BITIR
+from .platformlar import TURU_BITIR, GonderimSonucu, Hedef
 
 # Görev türleri (pacing kotalarıyla aynı adlar)
 RESPOND = "respond"
@@ -131,7 +131,7 @@ def hikaye_turu_yap(
 ) -> int:
     """Hikaye tepsisini sonuna kadar gezip yeni hedeflere açılış yanıtı gönderir.
 
-    Zaten yazılmış (son `yeniden_iletisim_gun` gün) veya do-not-contact hesaplar
+    Daha önce yazışılmış (`yeniden_iletisim_gun` 0 ise hiç, değilse son N gün) veya do-not-contact hesaplar
     atlanır. Her gönderim anında DB'ye yazılır; gönderimler saatlik tavana göre
     zamana yayılır. Duraklatma, kota dolması veya çalışma saatinin bitmesi turu
     hemen bitirir. Gönderilen açılış sayısını döner.
@@ -145,7 +145,7 @@ def hikaye_turu_yap(
         print("[opener] açılış kotası dolu — tur atlandı")
         return 0
 
-    gun = getattr(ayarlar, "yeniden_iletisim_gun", 30)
+    gun = getattr(ayarlar, "yeniden_iletisim_gun", 0)
     istatistik = {"secildi": 0, "gonderildi": 0, "atlandi_yakin": 0, "atlandi_dnc": 0, "gorulen": 0}
 
     def karar_fn(handle: str):
@@ -164,7 +164,7 @@ def hikaye_turu_yap(
             istatistik["atlandi_dnc"] += 1
             return None
         if repo.yakin_zamanda_iletisim(conn, h, gun):
-            istatistik["atlandi_yakin"] += 1  # son `gun` günde zaten yazmışız
+            istatistik["atlandi_yakin"] += 1  # daha önce (son `gun` günde) yazışmışız
             return None
         lead = repo.lead_getir_handle(conn, h)
         istatistik["secildi"] += 1
@@ -196,7 +196,7 @@ def hikaye_turu_yap(
     print(
         f"[opener] hikaye turu: gezilen={istatistik['gorulen']} "
         f"seçildi={istatistik['secildi']} gönderildi={gonderilen} "
-        f"atlandı(son {gun}g yazılmış)={istatistik['atlandi_yakin']} "
+        f"atlandı(önceden yazılmış{f', son {gun}g' if gun > 0 else ''})={istatistik['atlandi_yakin']} "
         f"atlandı(dnc)={istatistik['atlandi_dnc']} "
         f"son 1 saat={repo.son_saat_acilis_sayisi(conn)}"
     )
@@ -403,8 +403,10 @@ def tek_tur(
     return gorev
 
 
-def _acilis_metni(beyin_istemci, ayarlar, lead, rng: Optional[random.Random] = None) -> str:
-    """Açılış (hikaye-yanıtı) metni.
+def _acilis_metni(
+    beyin_istemci, ayarlar, lead, rng: Optional[random.Random] = None, baglam: str = "hikaye"
+) -> str:
+    """Açılış metni (`baglam`: "hikaye" = hikaye yanıtı, "dm" = direkt DM).
 
     "sabit" modda panelde girilen satırlardan rastgele biri; aksi halde beyin
     varsa GPT ile çeşitlendirilmiş metin, yoksa güvenli sabit.
@@ -415,7 +417,7 @@ def _acilis_metni(beyin_istemci, ayarlar, lead, rng: Optional[random.Random] = N
             return (rng or random).choice(satirlar)
     try:
         if hasattr(beyin_istemci, "acilis_uret"):
-            return beyin_istemci.acilis_uret(ayarlar, lead)
+            return beyin_istemci.acilis_uret(ayarlar, lead, baglam=baglam)
     except Exception:
         pass
     return "Merhabalar, kolay gelsin! İşlerinizin takibini yapmak için herhangi bir program kullanıyor musunuz?"

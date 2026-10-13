@@ -1,7 +1,7 @@
 """OpenAI tabanlı LLMIstemci implementasyonu.
 
 brain.LLMIstemci protokolünü uygular. openai>=1.0 SDK gerekir. Ayrıca zamanlayıcı
-için opsiyonel `acilis_uret` (hikaye-yanıtı metni çeşitlendirme) sağlar.
+için opsiyonel `acilis_uret` (açılış metni çeşitlendirme) sağlar.
 """
 
 from __future__ import annotations
@@ -16,6 +16,15 @@ VARSAYILAN_ACILIS = (
     "Merhabalar, kolay gelsin! İşlerinizin takibini yapmak için "
     "herhangi bir program kullanıyor musunuz?"
 )
+
+# Açılışın nereye gittiğine göre sistem talimatının başı
+ACILIS_BAGLAMI = {
+    "hikaye": "Bir halı yıkama işletmesinin Instagram hikayesine yanıt olarak gidecek",
+    "dm": (
+        "Bir halı yıkama işletmesine Instagram'dan doğrudan mesaj (DM) olarak gidecek; "
+        "hikayelerine atıf yapma, bizi tanımıyorlar"
+    ),
+}
 
 
 class OpenAIIstemci:
@@ -51,8 +60,8 @@ class OpenAIIstemci:
             args = {}
         return {"name": fn.name, "arguments": args}
 
-    def acilis_uret(self, ayarlar: Ayarlar, lead) -> str:
-        """Kısa, çeşitlendirilmiş bir hikaye-yanıtı açılış metni üretir."""
+    def acilis_uret(self, ayarlar: Ayarlar, lead, baglam: str = "hikaye") -> str:
+        """Kısa, çeşitlendirilmiş bir açılış metni üretir."""
         try:
             isim = lead["business_name"] if lead["business_name"] else ""
         except (KeyError, IndexError, TypeError):
@@ -64,8 +73,8 @@ class OpenAIIstemci:
                     {
                         "role": "system",
                         "content": (
-                            "Bir halı yıkama işletmesinin Instagram hikayesine "
-                            "yanıt olarak gidecek KISA, samimi bir açılış mesajı yaz. "
+                            f"{ACILIS_BAGLAMI.get(baglam, ACILIS_BAGLAMI['hikaye'])} "
+                            "KISA, samimi bir açılış mesajı yaz. "
                             "Amaç: iş takibi için program kullanıp kullanmadıklarını sormak. "
                             "Tek cümle, esnaf diline uygun, satış yapma, sadece nazik soru. "
                             "Robotik/şablon durma; her seferinde biraz farklı ifade et."
