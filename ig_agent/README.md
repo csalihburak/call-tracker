@@ -26,6 +26,7 @@ keşif → açılış(hikaye-yanıtı) → inbox okuma → GPT yanıtı ──�
 | `pacing.py` | Saf anti-ban: warmup, çalışma saati, kota |
 | `brain.py` | GPT satış beyni (playbook + araçlar + karar) |
 | `llm_openai.py` | OpenAI tabanlı LLM istemcisi |
+| `platformlar.py` | Platform istemcilerinin ortak tipleri (Hedef, GonderimSonucu) |
 | `instagram.py` | Playwright web otomasyonu (seçiciler `S` sınıfında) |
 | `inbox_ingest.py` | Gelen DM'leri DB'ye alma (dedupe) |
 | `scheduler.py` | Görev seçimi + karar uygulama + ana döngü |
@@ -38,7 +39,7 @@ keşif → açılış(hikaye-yanıtı) → inbox okuma → GPT yanıtı ──�
 
 ```bash
 cd call-tracker
-python -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r ig_agent/requirements.txt
 python -m playwright install chromium
 cp ig_agent/.env.example .env   # doldurun
@@ -70,12 +71,27 @@ Panel:
 
 ## Hikaye turu nasıl çalışır
 
-Bot ana sayfadaki hikaye tepsisini **sonuna kadar** gezer; son 30 günde
-yazılmamış ve do-not-contact olmayan her hesabın hikayesine yanıt verir.
+Bot ana sayfadaki hikaye tepsisini **sonuna kadar** gezer; daha önce hiç
+yazışılmamış ve do-not-contact olmayan her hesabın hikayesine yanıt verir
+(panelde "Aynı hesaba tekrar yazma" 0 = asla; N verilirse N gün sonra tekrar yazar).
 Gönderimler saatlik tavana göre saate yayılır (100/saat ≈ her ~36 sn'de bir),
 her gönderim anında DB'ye yazılır. Tur; duraklatma, kota dolması, çalışma
 saatinin bitmesi veya Instagram'ın "işlem engellendi" uyarısıyla hemen biter.
 Tepsi bitince *tur arası bekleme* kadar sonra yeni hikayeler için tekrar gezer.
+
+## Takip edilenlere direkt DM
+
+Panelde **Ayarlar → "Takip edilenlere direkt DM'i aç"** ile açılır (varsayılan
+kapalı). Bot hikaye turundan sonra kendi "Takip" listemizi
+(`/<kullanıcı adı>/following/`) sonuna kadar toplar; daha önce hiç yazışılmamış
+(hikaye yanıtı dahil, herhangi bir yönde) ve do-not-contact olmayan her hesaba
+profilindeki "Mesaj gönder" ile (yoksa `/direct/new/` üzerinden) açılış DM'i
+atar. Kotası hikaye yanıtından ayrıdır (varsayılan 15/saat, 80/gün); turlar
+arası bekleme varsayılan 30 dk. Instagram "bu hesaba mesaj gönderemezsin"
+derse hesap do-not-contact'a `dm_kapali` nedeniyle eklenir ve bir daha
+denenmez. Takip etmeyenlere giden DM'ler karşı tarafta "mesaj istekleri"ne düşer.
+
+Kullanıcı adı panelden girilebilir; boşsa sol menüdeki Profil bağlantısından bulunur.
 
 ## Güvenlik / anti-ban notları
 
