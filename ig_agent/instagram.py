@@ -31,6 +31,9 @@ _AYRILMIS_YOLLAR = {
 }
 _PROFIL_YOLU = re.compile(r"^/([A-Za-z0-9._]{1,30})/?$")
 
+# Takip listesi bu kadar saniye önbellekte tutulur (her turda baştan kaydırılmasın)
+TAKIP_ONBELLEK_SN = 3 * 3600
+
 
 class S:
     """Merkezî seçiciler (IG değişince burayı güncelle)."""
@@ -73,6 +76,10 @@ class S:
         return f"{IG_TABAN}/{kullanici}/following/"
 
     PROFIL_NAV_LINK = ['a[role="link"]:has-text("Profil")', 'a[role="link"]:has-text("Profile")']
+    # Takip penceresinin altındaki öneri bölümü başlıkları (küçük harf, tr-TR) —
+    # buradan sonrası takip ETMEDİĞİMİZ hesaplardır
+    ONERILEN_BASLIK = ["önerilenler", "senin için önerilenler", "suggested for you",
+                       "suggestions for you"]
 
     # Profilde "Mesaj gönder" yoksa: /direct/new/ akışı
     YENI_MESAJ_URL = f"{IG_TABAN}/direct/new/"
@@ -121,6 +128,7 @@ class InstagramClient:
         # Instagram "işlem engellendi" uyarısı gösterdiyse True olur; üst katman
         # bunu görüp botu duraklatır ve bayrağı sıfırlar.
         self.engel_algilandi = False
+        self._takip_onbellek: Optional[tuple[float, list[str]]] = None
 
     # ------------------------------------------------------------------ #
     # Yaşam döngüsü
@@ -404,7 +412,17 @@ class InstagramClient:
             pass
         return ""
 
-    def takip_listesi_topla(self, max_hesap: int = 5000) -> list[str]:
+    def takip_listesi_topla(self) -> list[str]:
+        """Takip listesi; TAKIP_ONBELLEK_SN boyunca önbellekten (boş liste saklanmaz)."""
+        if self._takip_onbellek and time.monotonic() - self._takip_onbellek[0] < TAKIP_ONBELLEK_SN:
+            return list(self._takip_onbellek[1])
+        liste = self._takip_listesini_kazi()
+        print(f"[ig] takip listesi toplandı: {len(liste)} hesap")
+        if liste:
+            self._takip_onbellek = (time.monotonic(), list(liste))
+        return liste
+
+    def _takip_listesini_kazi(self, max_hesap: int = 5000) -> list[str]:
         """Kendi "Takip" penceremizi sonuna kadar kaydırıp kullanıcı adlarını toplar.
 
         Profil açılınca pencere kapandığından liste gönderimden ÖNCE tamamen
@@ -424,8 +442,8 @@ class InstagramClient:
                 if dialog is None:
                     break
                 yeni = 0
-                for a in dialog.query_selector_all('a[href^="/"]'):
-                    eslesme = _PROFIL_YOLU.match(a.get_attribute("href") or "")
+                for yol in self._diyalog_profil_yollari(dialog):
+                    eslesme = _PROFIL_YOLU.match(yol)
                     if not eslesme:
                         continue
                     h = eslesme.group(1)
@@ -445,6 +463,32 @@ class InstagramClient:
             except Exception:
                 pass
         return toplanan[:max_hesap]
+
+    @staticmethod
+    def _diyalog_profil_yollari(dialog) -> list[str]:
+        """Penceredeki `/…` bağlantılarını DOM sırasıyla döner.
+
+        "Önerilenler / Suggested for you" başlığına gelince durur: oradan
+        sonrası takip etmediğimiz öneri hesaplarıdır.
+        """
+        return dialog.evaluate(
+            """(d, basliklar) => {
+                const yollar = [];
+                const gez = document.createTreeWalker(d, NodeFilter.SHOW_ELEMENT);
+                for (let e = gez.currentNode; e; e = gez.nextNode()) {
+                    if (e.children.length === 0) {
+                        const t = (e.textContent || '').trim().toLocaleLowerCase('tr-TR');
+                        if (basliklar.includes(t)) break;
+                    }
+                    if (e.tagName === 'A') {
+                        const h = e.getAttribute('href') || '';
+                        if (h.startsWith('/')) yollar.push(h);
+                    }
+                }
+                return yollar;
+            }""",
+            S.ONERILEN_BASLIK,
+        )
 
     @staticmethod
     def _diyalogu_kaydir(dialog) -> None:
@@ -494,6 +538,8 @@ class InstagramClient:
             kutu = self._page.query_selector(S.MESAJ_KUTUSU)
             if not kutu:
                 return GonderimSonucu.BASARISIZ
+            if self._sohbette_mesaj_var():
+                return GonderimSonucu.ONCEKI_SOHBET  # telefondan/elle yazışılmış
             kutu.click()
             self._insan_yaz(kutu, metin)
             self._page.keyboard.press("Enter")
@@ -530,6 +576,20 @@ class InstagramClient:
             return self._page.query_selector(S.MESAJ_KUTUSU) is not None
         except Exception:
             return False
+
+    def _sohbette_mesaj_var(self) -> bool:
+        """Açılan sohbette metinli bir mesaj satırı var mı (önceden yazışılmış mı)?"""
+        try:
+            ana = self._page.query_selector(S.THREAD_ANA)
+            if ana is None:
+                return False
+            for satir in ana.query_selector_all(S.MESAJ_SATIRI):
+                for el in satir.query_selector_all(S.MESAJ_METNI):
+                    if (el.inner_text() or "").strip():
+                        return True
+        except Exception:
+            pass
+        return False
 
     def _dm_kapali_uyarisi(self) -> bool:
         try:

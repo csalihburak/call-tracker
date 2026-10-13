@@ -82,3 +82,84 @@ def test_acik_uyari_varsa_dm_kapali(ig, monkeypatch):
 def test_kendi_kullanici_adi_ayardan(ig):
     ig._ayarlar.kendi_kullanici_adi = "@temizify.app "
     assert ig.kendi_kullanici_adi() == "temizify.app"
+
+
+# --- final inceleme düzeltmeleri: gerçek DOM üzerinde (headless Chromium) --- #
+@pytest.fixture(scope="module")
+def sayfa():
+    pw_api = pytest.importorskip("playwright.sync_api")
+    try:
+        pw = pw_api.sync_playwright().start()
+        tarayici = pw.chromium.launch(headless=True)
+    except Exception as hata:  # Chromium kurulu değilse
+        pytest.skip(f"chromium yok: {hata}")
+    sayfa = tarayici.new_page()
+    yield sayfa
+    tarayici.close()
+    pw.stop()
+
+
+def test_takip_diyalogu_onerilenlerde_durur(sayfa):
+    sayfa.set_content("""
+      <div role="dialog">
+        <div><a href="/halici1/">halici1</a><button>Takip ediliyor</button></div>
+        <div><a href="/explore/">x</a><a href="/halici2/">halici2</a></div>
+        <h4><span>Senin İçin Önerilenler</span></h4>
+        <div><a href="/yabanci/">yabanci</a><button>Takip et</button></div>
+      </div>""")
+    dialog = sayfa.query_selector('div[role="dialog"]')
+    assert InstagramClient._diyalog_profil_yollari(dialog) == ["/halici1/", "/explore/", "/halici2/"]
+
+
+def test_takip_diyalogu_baslik_yoksa_hepsi(sayfa):
+    sayfa.set_content('<div role="dialog"><a href="/a/">a</a><a href="/b/">b</a></div>')
+    dialog = sayfa.query_selector('div[role="dialog"]')
+    assert InstagramClient._diyalog_profil_yollari(dialog) == ["/a/", "/b/"]
+
+
+def test_sohbette_onceki_mesaj_tespiti(ig, sayfa):
+    ig._page = sayfa
+    sayfa.set_content('<div role="main"><div role="row"><div dir="auto">Merhaba usta</div></div></div>')
+    assert ig._sohbette_mesaj_var() is True
+    sayfa.set_content('<div role="main"><div role="row"></div><textarea></textarea></div>')
+    assert ig._sohbette_mesaj_var() is False
+
+
+class _SahteKutu:
+    def __init__(self):
+        self.yazilan = []
+
+    def click(self):
+        pass
+
+    def type(self, kar, delay=0):
+        self.yazilan.append(kar)
+
+
+class _SahteSayfa:
+    def __init__(self, kutu):
+        self.kutu = kutu
+        self.keyboard = self
+
+    def query_selector(self, secici):
+        return self.kutu
+
+    def press(self, tus):
+        pass
+
+
+def test_onceki_sohbet_varsa_yazmadan_doner(ig, monkeypatch):
+    kutu = _SahteKutu()
+    ig._page = _SahteSayfa(kutu)
+    monkeypatch.setattr(ig, "_profilden_mesaj_ac", lambda h: True)
+    monkeypatch.setattr(ig, "_sohbette_mesaj_var", lambda: True)
+    assert ig._dm_gonder_sonuc("musteri", "selam") == GonderimSonucu.ONCEKI_SOHBET
+    assert kutu.yazilan == []
+
+
+def test_takip_listesi_onbellekten_gelir(ig, monkeypatch):
+    kazima = []
+    monkeypatch.setattr(ig, "_takip_listesini_kazi", lambda: kazima.append(1) or ["a", "b"])
+    assert ig.takip_listesi_topla() == ["a", "b"]
+    assert ig.takip_listesi_topla() == ["a", "b"]
+    assert len(kazima) == 1

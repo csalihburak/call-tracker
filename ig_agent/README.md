@@ -93,6 +93,12 @@ denenmez. Takip etmeyenlere giden DM'ler karşı tarafta "mesaj istekleri"ne dü
 
 Kullanıcı adı panelden girilebilir; boşsa sol menüdeki Profil bağlantısından bulunur.
 
+Sohbet açıldığında içinde zaten mesaj varsa (telefondan/elle yazışılmış) yazılmaz;
+hesap do-not-contact'a `onceki_sohbet` nedeniyle eklenir. Takip penceresinin
+altındaki "Önerilenler" hesapları listeye alınmaz. Tur en fazla 15 dk sürer, sonra
+yanıt/hikaye turu araya girebilsin diye ara verir; art arda 5 gönderim başarısız
+olursa tur durur (seçiciler kırılmış olabilir). Takip listesi 3 saat önbellekte tutulur.
+
 ## Güvenlik / anti-ban notları
 
 - **Instagram otomasyonu Meta ToS'a aykırıdır**; action-block/ban riski gerçektir.
