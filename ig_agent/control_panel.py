@@ -68,6 +68,10 @@ def _hikaye_turu_simdi() -> None:
     repo.durum_ayarla(conn, "son_hikaye_turu", "")
 
 
+def _dm_turu_simdi() -> None:
+    repo.durum_ayarla(conn, "son_dm_turu", "")
+
+
 def _engeli_temizle() -> None:
     _bayrak_yaz("action_block", False)
     _bayrak_yaz("checkpoint_detected", False)
@@ -128,6 +132,9 @@ def canli_durum() -> None:
                           help="Tarayıcıyı kapatır ve bot sürecini sonlandırır.")
                 st.button("Hikaye turu şimdi", icon=":material/history:", on_click=_hikaye_turu_simdi,
                           key="btn_tur", help="Soğuma süresini sıfırlar; bot sıradaki adımda tura başlar.")
+                st.button("DM turu şimdi", icon=":material/send:", on_click=_dm_turu_simdi,
+                          key="btn_dm_tur", disabled=not ozet["dm_aktif"],
+                          help="Direkt DM soğumasını sıfırlar; bot sıradaki adımda takip listesi turuna başlar.")
 
     if ozet["action_block"] or ozet["checkpoint"]:
         neden = "Instagram 'işlem engellendi' uyarısı verdi" if ozet["action_block"] else \
@@ -141,9 +148,14 @@ def canli_durum() -> None:
     saatlik = p.acilis_saatlik or "∞"
     gunluk = p.acilis_gunluk or "∞"
     k = ozet["kotalar"]
+    dm_saatlik = p.dm_acilis_saatlik or "∞"
+    dm_gunluk = p.dm_acilis_gunluk or "∞"
     with st.container(horizontal=True):
         st.metric("Hikaye yanıtı · son 1 saat", f"{ozet['acilis_son_saat']} / {saatlik}", border=True)
         st.metric("Hikaye yanıtı · bugün", f"{ozet['acilis_bugun']} / {gunluk}", border=True)
+        st.metric("Direkt DM · son 1 saat",
+                  f"{ozet['dm_son_saat']} / {dm_saatlik}" if ozet["dm_aktif"] else "kapalı", border=True)
+        st.metric("Direkt DM · bugün", f"{ozet['dm_bugun']} / {dm_gunluk}", border=True)
         st.metric("DM yanıtı · bugün", f"{k['respond']['yapilan']} / {k['respond']['tavan']}", border=True)
         st.metric("Çalışma saati", f"{p.calisma_baslangic_saat}:00–{p.calisma_bitis_saat}:00", border=True)
 
@@ -239,6 +251,8 @@ with sek_konusma:
                     st.markdown(f":material/arrow_back: **onlar:** {m['body']}")
                 elif yon == "story_reply":
                     st.markdown(f":material/arrow_forward: *hikaye yanıtı:* {m['body']}")
+                elif yon == "dm_opener":
+                    st.markdown(f":material/arrow_forward: *direkt DM:* {m['body']}")
                 else:
                     etik = "AI" if m["ai_generated"] else "elle"
                     st.markdown(f":material/arrow_forward: **biz ({etik}):** {m['body']}")
@@ -255,8 +269,9 @@ with sek_ayar:
         saatlik = c1.number_input("Saatlik tavan", min_value=0, max_value=1000, value=int(p.acilis_saatlik),
                                   help="Son 60 dakikada en fazla. Gönderimler saate eşit yayılır.")
         gunluk = c2.number_input("Günlük tavan", min_value=0, max_value=10000, value=int(p.acilis_gunluk))
-        tekrar_gun = c3.number_input("Aynı hesaba tekrar yazmama (gün)", min_value=0, max_value=365,
-                                     value=int(a.yeniden_iletisim_gun))
+        tekrar_gun = c3.number_input("Aynı hesaba tekrar yazma (gün sonra)", min_value=0, max_value=365,
+                                     value=int(a.yeniden_iletisim_gun),
+                                     help="0 = asla: bir kez yazılan hesaba bir daha açılış yapılmaz.")
         cooldown_dk = st.number_input("Tepsi turları arası bekleme (dk)", min_value=1, max_value=240,
                                       value=max(1, int(p.hikaye_turu_cooldown_sn) // 60),
                                       help="Bir tur bittikten sonra yeni hikayeler için tepsiyi yeniden gezmeden önce.")
@@ -269,6 +284,20 @@ with sek_ayar:
             value=a.acilis_metinleri, height=120,
             placeholder="Merhabalar, kolay gelsin! İşlerinizi takip için bir program kullanıyor musunuz?",
         )
+
+        st.markdown("**Takip edilenlere direkt DM**")
+        c1, c2, c3 = st.columns(3)
+        dm_saatlik_in = c1.number_input("DM saatlik tavan", min_value=0, max_value=200,
+                                        value=int(p.dm_acilis_saatlik),
+                                        help="Hikaye yanıtı tavanından ayrıdır. 0 = sınırsız.")
+        dm_gunluk_in = c2.number_input("DM günlük tavan", min_value=0, max_value=2000,
+                                       value=int(p.dm_acilis_gunluk))
+        dm_cooldown_dk = c3.number_input("DM turları arası bekleme (dk)", min_value=1, max_value=720,
+                                         value=max(1, int(p.dm_turu_cooldown_sn) // 60))
+        kendi_ad = st.text_input("Instagram kullanıcı adımız",
+                                 value=a.kendi_kullanici_adi,
+                                 placeholder="boş bırakılırsa sayfadan bulunur",
+                                 help="Takip listesi /<kullanıcı adı>/following/ sayfasından okunur.")
 
         st.markdown("**Genel**")
         c1, c2, c3 = st.columns(3)
@@ -297,6 +326,10 @@ with sek_ayar:
                     "acilis_modu": mod or "gpt",
                     "acilis_metinleri": metinler.strip(),
                     "dm_max_gunluk": int(dm_max),
+                    "dm_acilis_saatlik": int(dm_saatlik_in),
+                    "dm_acilis_gunluk": int(dm_gunluk_in),
+                    "dm_turu_cooldown_sn": int(dm_cooldown_dk) * 60,
+                    "kendi_kullanici_adi": kendi_ad.strip().lstrip("@"),
                     "calisma_baslangic_saat": int(bas),
                     "calisma_bitis_saat": int(bit),
                     "aksiyon_bekleme_min": float(min(bek_min, bek_max)),
@@ -307,6 +340,17 @@ with sek_ayar:
     if int(p.acilis_saatlik) == 0 or int(p.acilis_saatlik) > 60:
         st.warning("Saatlik tavan yüksek. Instagram yüksek hacimde hikaye yanıtını 'işlem engellendi' ile "
                    "kısıtlayabilir; bot bunu algılarsa otomatik duraklar.", icon=":material/warning:")
+
+    if int(p.dm_acilis_saatlik) == 0 or int(p.dm_acilis_saatlik) > 20:
+        st.warning("DM saatlik tavanı yüksek. Takip etmeyenlere giden DM'ler 'mesaj istekleri'ne düşer ve "
+                   "Instagram bunları hikaye yanıtından daha sıkı sınırlar.", icon=":material/warning:")
+
+    st.markdown("**Takip edilenlere direkt DM**")
+    dm_aktif = repo.bayrak_getir(conn, "dm_acilis_aktif", False)
+    yeni_dm = st.toggle("Takip edilenlere direkt DM'i aç (hikaye turundan sonra çalışır)", value=dm_aktif)
+    if yeni_dm != dm_aktif:
+        repo.durum_ayarla(conn, "dm_acilis_aktif", "1" if yeni_dm else "0")
+        st.rerun()
 
     st.markdown("**Hashtag keşfi**")
     kesif = repo.bayrak_getir(conn, "kesif_aktif", False)
@@ -321,16 +365,10 @@ with sek_dnc:
     with st.form("dnc_ekle", clear_on_submit=True):
         handle = st.text_input("Handle ekle (bu hesaba asla yazılmaz)", placeholder="ornek_hesap")
         if st.form_submit_button("Ekle") and handle.strip():
-            conn.execute(
-                "INSERT OR IGNORE INTO dnc_handles (handle, reason) VALUES (?, ?)",
-                (handle.strip().lstrip("@"), "panelden elle"),
-            )
-            conn.commit()
+            repo.dnc_ekle(conn, handle.strip().lstrip("@"), "panelden elle")
             st.success(f"@{handle.strip().lstrip('@')} eklendi.")
 
-    dnc = conn.execute(
-        "SELECT handle, reason, created_at FROM dnc_handles ORDER BY created_at DESC LIMIT 100"
-    ).fetchall()
+    dnc = repo.dnc_listesi(conn)
     if dnc:
         st.dataframe(
             [{"handle": d["handle"], "sebep": d["reason"], "tarih": d["created_at"]} for d in dnc],
