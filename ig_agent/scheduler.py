@@ -23,6 +23,7 @@ from .platformlar import TURU_BITIR, GonderimSonucu, Hedef
 RESPOND = "respond"
 OPENER = "opener"
 DISCOVER = "discover"
+DIRECT_DM = "direct_dm"
 
 
 # --------------------------------------------------------------------------- #
@@ -41,13 +42,15 @@ class BildirimClient(Protocol):
 # Saf: hangi görev?
 # --------------------------------------------------------------------------- #
 def sonraki_gorev(
-    izinli: list[str], yanit_var: bool, acilis_var: bool
+    izinli: list[str], yanit_var: bool, acilis_var: bool, dm_var: bool = False
 ) -> Optional[str]:
-    """Öncelik: bekleyen yanıt > açılış > keşif. Kota + kuyruk birlikte gerekir."""
+    """Öncelik: yanıt > hikaye açılışı > direkt DM > keşif. Kota + kuyruk birlikte gerekir."""
     if RESPOND in izinli and yanit_var:
         return RESPOND
     if OPENER in izinli and acilis_var:
         return OPENER
+    if DIRECT_DM in izinli and dm_var:
+        return DIRECT_DM
     if DISCOVER in izinli:
         return DISCOVER
     return None
@@ -71,12 +74,32 @@ def acilis_kalan(conn: sqlite3.Connection, ayarlar: Ayarlar) -> int:
     return kalan
 
 
-def acilis_araligi_sn(ayarlar: Ayarlar, rng: random.Random) -> float:
-    """İki hikaye-yanıtı arası hedef süre: saatlik tavanı saate yayar (±%30)."""
-    saatlik = ayarlar.pacing.acilis_saatlik
+def _aralik_sn(saatlik: int, rng: random.Random) -> float:
+    """Saatlik tavanı saate yayan hedef aralık (±%30); tavan 0 ise kısa rastgele."""
     if saatlik <= 0:
         return rng.uniform(8.0, 20.0)
     return (3600.0 / saatlik) * rng.uniform(0.7, 1.3)
+
+
+def acilis_araligi_sn(ayarlar: Ayarlar, rng: random.Random) -> float:
+    """İki hikaye-yanıtı arası hedef süre."""
+    return _aralik_sn(ayarlar.pacing.acilis_saatlik, rng)
+
+
+def dm_acilis_kalan(conn: sqlite3.Connection, ayarlar: Ayarlar) -> int:
+    """Şu an gönderilebilecek direkt DM açılışı (saatlik ve günlük tavanın küçüğü)."""
+    p = ayarlar.pacing
+    kalan = SINIRSIZ
+    if p.dm_acilis_saatlik > 0:
+        kalan = min(kalan, max(0, p.dm_acilis_saatlik - repo.son_saat_dm_acilis_sayisi(conn)))
+    if p.dm_acilis_gunluk > 0:
+        kalan = min(kalan, max(0, p.dm_acilis_gunluk - repo.bugun_dm_acilis_sayisi(conn)))
+    return kalan
+
+
+def dm_acilis_araligi_sn(ayarlar: Ayarlar, rng: random.Random) -> float:
+    """İki direkt DM arası hedef süre."""
+    return _aralik_sn(ayarlar.pacing.dm_acilis_saatlik, rng)
 
 
 def uyku(conn: sqlite3.Connection, sn: float, adim: float = 5.0) -> bool:
@@ -99,18 +122,21 @@ def kota_durumlari(conn: sqlite3.Connection, ayarlar: Ayarlar) -> list[pacing.Ko
     # Hashtag keşfi varsayılan KAPALI (story-tepsisi birincil açılış kaynağı).
     kesif_aktif = repo.bayrak_getir(conn, "kesif_aktif", False)
     kesif_tavan = p.kesif_max_gunluk if kesif_aktif else 0
+    # Direkt DM varsayılan KAPALI; panelden açılır.
+    dm_aktif = repo.bayrak_getir(conn, "dm_acilis_aktif", False)
+    son_saat_dm = repo.son_saat_dm_acilis_sayisi(conn)
+    dm_tavan = son_saat_dm + dm_acilis_kalan(conn, ayarlar) if dm_aktif else 0
     return [
         pacing.KotaDurumu(RESPOND, repo.bugun_yanit_sayisi(conn), p.dm_max_gunluk),
         pacing.KotaDurumu(OPENER, son_saat, son_saat + acilis_kalan(conn, ayarlar)),
+        pacing.KotaDurumu(DIRECT_DM, son_saat_dm, dm_tavan),
         pacing.KotaDurumu(DISCOVER, repo.bugun_kesif_sayisi(conn), kesif_tavan),
     ]
 
 
-def _hikaye_turu_zamani(
-    conn: sqlite3.Connection, cooldown: int = HIKAYE_TURU_COOLDOWN_SN
-) -> bool:
-    """Son hikaye turundan bu yana yeterince zaman geçti mi?"""
-    son = repo.durum_getir(conn, "son_hikaye_turu", "")
+def _tur_zamani(conn: sqlite3.Connection, anahtar: str, cooldown: int) -> bool:
+    """`anahtar`daki son tur damgasından bu yana `cooldown` sn geçti mi?"""
+    son = repo.durum_getir(conn, anahtar, "")
     if not son:
         return True
     try:
@@ -118,6 +144,13 @@ def _hikaye_turu_zamani(
         return gecen >= cooldown
     except ValueError:
         return True
+
+
+def _hikaye_turu_zamani(
+    conn: sqlite3.Connection, cooldown: int = HIKAYE_TURU_COOLDOWN_SN
+) -> bool:
+    """Son hikaye turundan bu yana yeterince zaman geçti mi?"""
+    return _tur_zamani(conn, "son_hikaye_turu", cooldown)
 
 
 def hikaye_turu_yap(
@@ -205,6 +238,105 @@ def hikaye_turu_yap(
         print(f"[opener] ⚠️ {basarisiz} hikayede yanıt gönderilemedi — "
               f"S.HIKAYE_YANIT_KUTUSU seçicisi ayarlanmalı olabilir")
     return gonderilen
+
+
+def direkt_dm_turu_yap(
+    conn,
+    ayarlar,
+    istemci,
+    beyin_istemci,
+    rng: Optional[random.Random] = None,
+    uyku_fn: Optional[Callable[[float], bool]] = None,
+    simdi_fn: Callable[[], datetime] = datetime.now,
+) -> int:
+    """İstemcinin hedef listesini (IG: takip edilenler) gezip yeni hedeflere DM atar.
+
+    Hikaye turuyla aynı kurallar: daha önce yazışılmış (o platformda, herhangi
+    bir yönde) veya do-not-contact hesaplar atlanır; her gönderim anında DB'ye
+    yazılır; gönderimler DM saatlik tavanına göre zamana yayılır; duraklatma,
+    kota veya çalışma saati turu bitirir. DM kutusu kapalı hesaplar `dnc`'ye
+    `dm_kapali` ile eklenir. Gönderilen DM sayısını döner.
+    """
+    rng = rng or random.Random()
+    uyku_fn = uyku_fn or (lambda sn: uyku(conn, sn))
+    p = ayarlar.pacing
+    platform = getattr(istemci, "platform", "instagram")
+
+    if dm_acilis_kalan(conn, ayarlar) <= 0:
+        repo.durum_ayarla(conn, "son_dm_turu", datetime.now().isoformat())
+        print("[dm] direkt DM kotası dolu — tur atlandı")
+        return 0
+
+    gun = getattr(ayarlar, "yeniden_iletisim_gun", 0)
+    ist = {"gorulen": 0, "secildi": 0, "gonderildi": 0, "kapali": 0,
+           "basarisiz": 0, "atlandi_yakin": 0, "atlandi_dnc": 0}
+
+    def karar_fn(hedef: Hedef):
+        ist["gorulen"] += 1
+        repo.nabiz_at(conn, f"DM turu · @{hedef.handle} · gönderilen {ist['gonderildi']}")
+        if repo.bayrak_getir(conn, "master_paused", False):
+            return TURU_BITIR
+        if not pacing.calisma_saatinde_mi(simdi_fn(), p.calisma_baslangic_saat, p.calisma_bitis_saat):
+            return TURU_BITIR
+        if dm_acilis_kalan(conn, ayarlar) <= 0:
+            return TURU_BITIR
+        h = (hedef.handle or "").strip().lstrip("@")
+        if not h:
+            return None
+        if repo.dnc_mi(conn, h, platform):
+            ist["atlandi_dnc"] += 1
+            return None
+        if repo.yakin_zamanda_iletisim(conn, h, gun, platform=platform):
+            ist["atlandi_yakin"] += 1
+            return None
+        lead = repo.lead_getir_platform(conn, platform, h)
+        ist["secildi"] += 1
+        return _acilis_metni(beyin_istemci, ayarlar, lead, rng, baglam="dm")
+
+    def yazmadan_once() -> bool:
+        """Bir önceki DM'den bu yana hedef aralık dolmadıysa bekle."""
+        bekle = dm_acilis_araligi_sn(ayarlar, rng)
+        son = repo.son_dm_acilis_zamani(conn, platform)
+        if son:
+            try:
+                bekle -= (datetime.now() - datetime.fromisoformat(son)).total_seconds()
+            except ValueError:
+                pass
+        if bekle > 0:
+            repo.nabiz_at(conn, f"DM turu · tempo beklemesi {int(bekle)} sn")
+        return uyku_fn(max(0.0, bekle))
+
+    def sonuc_fn(hedef: Hedef, metin: str, sonuc: GonderimSonucu) -> None:
+        h = (hedef.handle or "").strip().lstrip("@")
+        if sonuc == GonderimSonucu.GONDERILDI:
+            lead_id = repo.lead_upsert(
+                conn, platform=platform, handle=h, business_name=hedef.ad or h,
+                profile_url=hedef.profile_url, discovery_source=hedef.kaynak,
+            )
+            repo.mesaj_ekle(conn, lead_id, "dm_opener", metin, ai_generated=True)
+            ist["gonderildi"] += 1
+        elif sonuc == GonderimSonucu.DM_KAPALI:
+            repo.dnc_ekle(conn, h, "dm_kapali", platform=platform)
+            ist["kapali"] += 1
+        else:
+            ist["basarisiz"] += 1
+
+    istemci.acilis_turu(karar_fn, sonuc_fn, yazmadan_once)
+
+    repo.durum_ayarla(conn, "son_dm_turu", datetime.now().isoformat())
+    print(
+        f"[dm] direkt DM turu: gezilen={ist['gorulen']} seçildi={ist['secildi']} "
+        f"gönderildi={ist['gonderildi']} dm_kapalı={ist['kapali']} "
+        f"başarısız={ist['basarisiz']} "
+        f"atlandı(önceden yazılmış)={ist['atlandi_yakin']} atlandı(dnc)={ist['atlandi_dnc']} "
+        f"son 1 saat={repo.son_saat_dm_acilis_sayisi(conn, platform)}"
+    )
+    if ist["gorulen"] == 0:
+        print("[dm] ⚠️ takip listesi boş geldi — kullanıcı adı ya da liste seçicileri kontrol edilmeli")
+    elif ist["gonderildi"] == 0 and (ist["basarisiz"] + ist["kapali"]) >= 3 \
+            and not getattr(istemci, "engel_algilandi", False):
+        print("[dm] ⚠️ hiç DM gönderilemedi — S.MESAJ_KUTUSU / yeni mesaj seçicileri ayarlanmalı olabilir")
+    return ist["gonderildi"]
 
 
 # --------------------------------------------------------------------------- #
@@ -324,6 +456,9 @@ def durum_ozeti(conn: sqlite3.Connection, ayarlar: Ayarlar) -> dict:
         "action_block": engel,
         "acilis_son_saat": repo.son_saat_acilis_sayisi(conn),
         "acilis_bugun": repo.bugun_acilis_sayisi(conn),
+        "dm_aktif": repo.bayrak_getir(conn, "dm_acilis_aktif", False),
+        "dm_son_saat": repo.son_saat_dm_acilis_sayisi(conn),
+        "dm_bugun": repo.bugun_dm_acilis_sayisi(conn),
         "kotalar": {k.tur: {"yapilan": k.yapilan, "tavan": k.tavan, "kalan": k.kalan} for k in kotalar},
         "izinli_aksiyonlar": izinli,
     }
@@ -371,7 +506,10 @@ def tek_tur(
     yanit_var = bool(yanitlar)
     # Açılış kaynağı artık hikaye tepsisi; soğuma süresi geçtiyse tur yapılabilir
     acilis_var = _hikaye_turu_zamani(conn, ayarlar.pacing.hikaye_turu_cooldown_sn)
-    gorev = sonraki_gorev(izinli, yanit_var, acilis_var)
+    dm_var = hasattr(ig, "acilis_turu") and _tur_zamani(
+        conn, "son_dm_turu", ayarlar.pacing.dm_turu_cooldown_sn
+    )
+    gorev = sonraki_gorev(izinli, yanit_var, acilis_var, dm_var)
     if gorev is None:
         return None
 
@@ -392,6 +530,9 @@ def tek_tur(
     elif gorev == OPENER:
         repo.nabiz_at(conn, "hikaye turu başlıyor")
         hikaye_turu_yap(conn, ayarlar, ig, beyin_istemci, rng)
+    elif gorev == DIRECT_DM:
+        repo.nabiz_at(conn, "direkt DM turu başlıyor")
+        direkt_dm_turu_yap(conn, ayarlar, ig, beyin_istemci, rng)
     elif gorev == DISCOVER:
         repo.nabiz_at(conn, "hashtag keşfi")
         _kesif_turu(conn, ayarlar, ig)

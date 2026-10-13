@@ -64,7 +64,7 @@ def _bosta_nedeni(ozet: dict, ayarlar) -> str:
         return f"çalışma saati dışı ({p.calisma_baslangic_saat}:00–{p.calisma_bitis_saat}:00)"
     if not ozet["izinli_aksiyonlar"]:
         return "kotalar dolu"
-    return "bekleyen yanıt yok, hikaye turu soğumada"
+    return "bekleyen yanıt yok, hikaye/DM turları soğumada"
 
 
 def main() -> None:

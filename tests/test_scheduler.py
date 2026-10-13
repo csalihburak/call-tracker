@@ -33,6 +33,17 @@ class TestSonrakiGorev:
     def test_respond_kota_dolu_acilisa_gecer(self):
         assert sch.sonraki_gorev([sch.OPENER], yanit_var=True, acilis_var=True) == sch.OPENER
 
+    def test_hikaye_dm_den_once(self):
+        izinli = [sch.OPENER, sch.DIRECT_DM, sch.DISCOVER]
+        assert sch.sonraki_gorev(izinli, False, acilis_var=True, dm_var=True) == sch.OPENER
+
+    def test_hikaye_sogumadaysa_dm(self):
+        izinli = [sch.OPENER, sch.DIRECT_DM, sch.DISCOVER]
+        assert sch.sonraki_gorev(izinli, False, acilis_var=False, dm_var=True) == sch.DIRECT_DM
+
+    def test_dm_kesiften_once(self):
+        assert sch.sonraki_gorev([sch.DIRECT_DM, sch.DISCOVER], False, False, True) == sch.DIRECT_DM
+
 
 # --------------------------------------------------------------------------- #
 # karari_uygula
@@ -146,7 +157,7 @@ def test_takip(ortam):
 def test_kota_durumlari_turleri(ortam):
     conn, ayarlar, lead = ortam
     kotalar = {k.tur for k in sch.kota_durumlari(conn, ayarlar)}
-    assert kotalar == {sch.RESPOND, sch.OPENER, sch.DISCOVER}
+    assert kotalar == {sch.RESPOND, sch.OPENER, sch.DIRECT_DM, sch.DISCOVER}
 
 
 def test_kesif_varsayilan_kapali_tavan_sifir(ortam):
@@ -353,3 +364,151 @@ def test_turu_bitir_tek_kaynak():
     from ig_agent import instagram, platformlar
 
     assert instagram.TURU_BITIR is platformlar.TURU_BITIR
+
+
+# --------------------------------------------------------------------------- #
+# direkt_dm_turu_yap (takip listesinden DM açılışı)
+# --------------------------------------------------------------------------- #
+from ig_agent.platformlar import GonderimSonucu, Hedef  # noqa: E402
+
+
+class SahteDMIstemci:
+    """Hedef listesini gezer; sonuçlar handle bazında ayarlanabilir."""
+
+    platform = "instagram"
+
+    def __init__(self, handles, sonuclar=None, engel_sonra=None):
+        self.hedefler = [Hedef(handle=h, kaynak="takip_listesi") for h in handles]
+        self.sonuclar = sonuclar or {}
+        self.engel_sonra = engel_sonra
+        self.engel_algilandi = False
+        self.gonderilen = []
+
+    def acilis_turu(self, karar_fn, sonuc_fn, yazmadan_once):
+        for hedef in self.hedefler:
+            metin = karar_fn(hedef)
+            if metin == TURU_BITIR:
+                break
+            if not metin:
+                continue
+            if not yazmadan_once():
+                break
+            sonuc = self.sonuclar.get(hedef.handle, GonderimSonucu.GONDERILDI)
+            if sonuc == GonderimSonucu.GONDERILDI:
+                self.gonderilen.append(hedef.handle)
+            sonuc_fn(hedef, metin, sonuc)
+            if self.engel_sonra is not None and len(self.gonderilen) >= self.engel_sonra:
+                self.engel_algilandi = True
+                break
+
+
+def _dm_turu(conn, ayarlar, istemci, **kw):
+    kw.setdefault("uyku_fn", lambda sn: True)
+    kw.setdefault("simdi_fn", OGLEN)
+    return sch.direkt_dm_turu_yap(conn, ayarlar, istemci, object(), **kw)
+
+
+def test_dm_turu_yeni_hedeflere_yazar(ortam):
+    conn, ayarlar, lead = ortam
+    hik = repo.ig_lead_upsert(conn, ig_handle="hikayeli", business_name="H")
+    repo.mesaj_ekle(conn, hik, "story_reply", "önceki")
+    repo.dnc_ekle(conn, "dncli", "x")
+
+    ist = SahteDMIstemci(["yeni1", "hikayeli", "dncli", "@yeni2 "])
+    assert _dm_turu(conn, ayarlar, ist) == 2
+    for h in ("yeni1", "yeni2"):
+        l = repo.lead_getir_platform(conn, "instagram", h)
+        assert l["discovery_source"] == "takip_listesi" and l["stage"] == "ilk_temas"
+        msjlar = repo.thread_mesajlari(conn, int(l["id"]))
+        assert [m["direction"] for m in msjlar] == ["dm_opener"]
+    assert repo.durum_getir(conn, "son_dm_turu")  # soğuma başladı
+
+
+def test_dm_kapali_dnc_ye_eklenir_ve_tekrar_denenmez(ortam):
+    conn, ayarlar, lead = ortam
+    ist = SahteDMIstemci(["kapali"], sonuclar={"kapali": GonderimSonucu.DM_KAPALI})
+    assert _dm_turu(conn, ayarlar, ist) == 0
+    assert repo.dnc_mi(conn, "kapali")
+    assert repo.dnc_listesi(conn)[0]["reason"] == "dm_kapali"
+    assert repo.lead_getir_platform(conn, "instagram", "kapali") is None
+
+    secilen = []
+    ist2 = SahteDMIstemci(["kapali"])
+    ist2.acilis_turu = lambda k, s, y: secilen.append(k(ist2.hedefler[0]))
+    _dm_turu(conn, ayarlar, ist2)
+    assert secilen == [None]
+
+
+def test_dm_basarisiz_kayit_birakmaz_sonra_tekrar_denenir(ortam):
+    conn, ayarlar, lead = ortam
+    ist = SahteDMIstemci(["gecici"], sonuclar={"gecici": GonderimSonucu.BASARISIZ})
+    assert _dm_turu(conn, ayarlar, ist) == 0
+    assert not repo.dnc_mi(conn, "gecici")
+    assert repo.lead_getir_platform(conn, "instagram", "gecici") is None
+    assert _dm_turu(conn, ayarlar, SahteDMIstemci(["gecici"])) == 1
+
+
+def test_dm_turu_saatlik_tavanda_durur_ve_kaldigi_yerden_devam(ortam):
+    conn, ayarlar, lead = ortam
+    ayarlar.pacing.dm_acilis_saatlik = 2
+    assert _dm_turu(conn, ayarlar, SahteDMIstemci(["a", "b", "c"])) == 2
+    assert sch.dm_acilis_kalan(conn, ayarlar) == 0
+    ayarlar.pacing.dm_acilis_saatlik = 10
+    ist = SahteDMIstemci(["a", "b", "c"])
+    assert _dm_turu(conn, ayarlar, ist) == 1
+    assert ist.gonderilen == ["c"]
+
+
+def test_dm_ve_hikaye_kotalari_bagimsiz(ortam):
+    conn, ayarlar, lead = ortam
+    ayarlar.pacing.acilis_saatlik = 1
+    ayarlar.pacing.dm_acilis_saatlik = 1
+    assert _tur(conn, ayarlar, SahteHikayeIG(["h1"])) == 1
+    assert sch.acilis_kalan(conn, ayarlar) == 0
+    assert _dm_turu(conn, ayarlar, SahteDMIstemci(["d1"])) == 1  # hikaye kotası DM'i durdurmaz
+    assert sch.dm_acilis_kalan(conn, ayarlar) == 0
+    ayarlar.pacing.acilis_saatlik = 5
+    assert _tur(conn, ayarlar, SahteHikayeIG(["h2"])) == 1  # DM kotası hikayeyi durdurmaz
+
+
+def test_dm_atilan_hesaba_hikaye_yaniti_atilmaz_ve_tersi(ortam):
+    conn, ayarlar, lead = ortam
+    _dm_turu(conn, ayarlar, SahteDMIstemci(["ortak1"]))
+    hik = SahteHikayeIG(["ortak1"])
+    assert _tur(conn, ayarlar, hik) == 0
+    _tur(conn, ayarlar, SahteHikayeIG(["ortak2"]))
+    ist = SahteDMIstemci(["ortak2"])
+    assert _dm_turu(conn, ayarlar, ist) == 0 and ist.gonderilen == []
+
+
+def test_dm_turu_bos_liste_soguma_baslatir(ortam):
+    conn, ayarlar, lead = ortam
+    assert _dm_turu(conn, ayarlar, SahteDMIstemci([])) == 0
+    assert not sch._tur_zamani(conn, "son_dm_turu", 3600)
+
+
+def test_dm_turu_duraklatilinca_ve_mesai_disinda_biter(ortam):
+    conn, ayarlar, lead = ortam
+    repo.durum_ayarla(conn, "master_paused", "1")
+    assert _dm_turu(conn, ayarlar, SahteDMIstemci(["a1"])) == 0
+    repo.durum_ayarla(conn, "master_paused", "0")
+    gece = lambda: datetime(2026, 9, 24, 23, 0)  # noqa: E731
+    assert _dm_turu(conn, ayarlar, SahteDMIstemci(["a1"]), simdi_fn=gece) == 0
+
+
+def test_dm_tempo_beklemesi_saatlik_tavana_gore(ortam):
+    conn, ayarlar, lead = ortam
+    ayarlar.pacing.dm_acilis_saatlik = 10  # ~360 sn ± %30
+    beklemeler = []
+    _dm_turu(conn, ayarlar, SahteDMIstemci(["a1"]),
+             uyku_fn=lambda sn: beklemeler.append(sn) or True)
+    assert len(beklemeler) == 1 and 252 <= beklemeler[0] <= 468
+
+
+def test_dm_kotasi_bayrak_kapaliyken_sifir(ortam):
+    conn, ayarlar, lead = ortam
+    k = {x.tur: x for x in sch.kota_durumlari(conn, ayarlar)}
+    assert k[sch.DIRECT_DM].tavan == 0
+    repo.durum_ayarla(conn, "dm_acilis_aktif", "1")
+    k = {x.tur: x for x in sch.kota_durumlari(conn, ayarlar)}
+    assert k[sch.DIRECT_DM].musait
