@@ -167,7 +167,21 @@ class TikTokClient(TarayiciIstemci):
         """Önbellekli takip listesi; bu süreçte düğmesiz görülen hesaplar hariç."""
         return [h for h in super().takip_listesi_topla() if h not in self._dugmesiz]
 
-    def _takip_listesini_kazi(self, max_hesap: int = 5000) -> list[str]:
+    def _takip_listesini_kazi(self) -> list[str]:
+        """Takip listesi; boş gelirse sayfayı yenileyip bir kez daha dener (saatlerce
+        açık kalan tarayıcıda liste canlıda 0 hesap döndü, yeniden açılınca 30 geldi)."""
+        liste = self._takip_listesini_bir_kez_kazi()
+        if liste:
+            return liste
+        print("[tiktok] takip listesi boş geldi — sayfa yenilenip bir kez daha deneniyor")
+        try:
+            self._page.reload(wait_until="domcontentloaded", timeout=60_000)
+        except Exception:
+            pass
+        time.sleep(self._rng.uniform(3.0, 5.0))
+        return self._takip_listesini_bir_kez_kazi()
+
+    def _takip_listesini_bir_kez_kazi(self, max_hesap: int = 5000) -> list[str]:
         """Kendi profilimizde "Takip edilen" penceresini sonuna kadar kaydırıp
         kullanıcı adlarını toplar. 4 kaydırmada yeni hesap gelmezse liste bitmiştir."""
         kendi = self.kendi_kullanici_adi()

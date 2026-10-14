@@ -366,3 +366,30 @@ def test_hedef_gorunen_adi_tasir(tt):
     tt._adlar = {"a_hali": "A Halı Yıkama"}
     assert tt._hedef("a_hali").ad == "A Halı Yıkama"
     assert tt._hedef("b").ad == ""
+
+
+class _YenilenenSayfa:
+    def __init__(self):
+        self.yenileme = 0
+
+    def reload(self, **kw):
+        self.yenileme += 1
+
+
+def test_takip_listesi_bos_gelirse_sayfayi_yenileyip_bir_kez_daha_dener(tt, monkeypatch):
+    # Saatlerce açık kalan tarayıcıda liste 0 hesap döndü; yeniden açılınca 30 geldi
+    monkeypatch.setattr("ig_agent.tiktok.time.sleep", lambda sn: None)
+    tt._page = _YenilenenSayfa()
+    sonuclar = iter([[], ["a", "b"]])
+    monkeypatch.setattr(tt, "_takip_listesini_bir_kez_kazi", lambda: next(sonuclar))
+    assert tt._takip_listesini_kazi() == ["a", "b"]
+    assert tt._page.yenileme == 1
+
+
+def test_takip_listesi_ikinci_denemede_de_bossa_birakir(tt, monkeypatch):
+    monkeypatch.setattr("ig_agent.tiktok.time.sleep", lambda sn: None)
+    tt._page = _YenilenenSayfa()
+    cagri = []
+    monkeypatch.setattr(tt, "_takip_listesini_bir_kez_kazi", lambda: cagri.append(1) or [])
+    assert tt._takip_listesini_kazi() == []
+    assert len(cagri) == 2

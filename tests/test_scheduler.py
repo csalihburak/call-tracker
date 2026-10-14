@@ -728,3 +728,12 @@ def test_dm_turu_hedef_adini_metin_secimine_verir(ortam):
         "WHERE l.platform = 'tiktok'").fetchall())
     assert metinler["damla_x"] == M_HALI
     assert metinler["emre_x"] != M_HALI
+
+
+def test_oto_yikama_hali_metni_almaz(ortam):
+    # "yıkama" kelimesi oto yıkamayı da yakalıyordu (canlıda tdzmobilotoyikama halı metni aldı)
+    _, ayarlar, _ = ortam
+    _sabit(ayarlar, M_GENEL, M_HALI)
+    assert _secimler(ayarlar, "tdzmobilotoyikama Tdzmobilotoyıkama", AKSAM) == {M_GENEL}
+    assert _secimler(ayarlar, "ankara araç yıkama", AKSAM) == {M_GENEL}
+    assert _secimler(ayarlar, "fero757575 Gündüzler halı yıkama", AKSAM) == {M_GENEL, M_HALI}

@@ -613,6 +613,8 @@ def tek_tur(
 # kullanıcı adı sektör kelimesi içeren işletmeye gider (ör. "Halı teslim…" → halıcıya)
 SEKTOR_METIN_KELIMELERI = ("halı", "koltuk")
 SEKTOR_HEDEF_KELIMELERI = ("hali", "halı", "koltuk", "yikama", "yıkama", "temizlik", "carpet")
+# …ama bunlardan biri de geçiyorsa sektör dışı say ("oto yıkama" halıcı değildir)
+SEKTOR_DISI_HEDEF_KELIMELERI = ("oto", "araç", "arac", "carwash", "car wash")
 # Selamlaşma → geçerli olduğu saat aralığı [başlangıç, bitiş)
 SELAM_SAATLERI = {"günaydın": (0, 12), "iyi akşamlar": (17, 24), "iyi geceler": (21, 24)}
 
@@ -625,7 +627,8 @@ def _tr_kucuk(metin: str) -> str:
 def uygun_acilis_metinleri(satirlar: list[str], hedef_adi: str, an: datetime) -> list[str]:
     """Hedefe ve saate uymayan sabit metinleri eler (GPT yokken "uygun olanı" seçmek için)."""
     hedef = _tr_kucuk(hedef_adi)
-    sektorde = any(k in hedef for k in SEKTOR_HEDEF_KELIMELERI)
+    sektorde = any(k in hedef for k in SEKTOR_HEDEF_KELIMELERI) \
+        and not any(k in hedef for k in SEKTOR_DISI_HEDEF_KELIMELERI)
     uygun = []
     for satir in satirlar:
         kucuk = _tr_kucuk(satir)
